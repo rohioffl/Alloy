@@ -41,14 +41,33 @@ Alloy runs as the **only agent** on each node and handles:
 
 ---
 
-## Quick Start
+## Install on Any Node
+
+### Download and run
 
 ```bash
-sudo REMOTE_WRITE_URL=http://<prometheus>:9090/api/v1/write \
-     GRAFANA_URL=http://<grafana>:3000 \
-     GRAFANA_API_KEY=glsa_xxxxx \
-     bash install-alloy.sh
+wget https://raw.githubusercontent.com/rohioffl/Alloy/main/install-alloy.sh
+sudo bash install-alloy.sh -remote-write=http://3.7.218.171:9090/api/v1/write
 ```
+
+### One-liner
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rohioffl/Alloy/main/install-alloy.sh | \
+  sudo bash -s -- -remote-write=http://3.7.218.171:9090/api/v1/write
+```
+
+The node appears in your Grafana dashboards within 30 seconds.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `-remote-write=URL` | Prometheus remote_write endpoint (required) |
+| `-loki=URL` | Loki push endpoint (optional) |
+| `-probes=TARGETS` | Comma-separated `host:port` or `auto` (default) |
+| `-processes=NAMES` | Comma-separated process names or `auto` (default) |
+| `-uninstall` | Remove Alloy and stop services |
 
 ---
 
@@ -72,12 +91,8 @@ sudo REMOTE_WRITE_URL=http://<prometheus>:9090/api/v1/write \
 |----------|---------|-------------|
 | `REMOTE_WRITE_URL` | `http://localhost:9090/api/v1/write` | Prometheus remote_write endpoint |
 | `LOKI_URL` | `http://localhost:3000/loki/api/v1/push` | Loki push API |
-| `GRAFANA_URL` | `http://localhost:3000` | Grafana base URL |
-| `GRAFANA_API_KEY` | — | Service account token (needed for dashboards) |
-| `ENV_LABEL` | `prod` | Value for the `env` label on all metrics |
 | `PROBE_TARGETS` | `auto` | `auto` = discover from `ss`, or comma-separated `host:port` |
 | `PROCESS_NAMES` | `auto` | `auto` = discover from running services, or comma-separated |
-| `SKIP_DASHBOARDS` | `0` | Set to `1` to skip dashboard deployment |
 
 ---
 
@@ -189,7 +204,11 @@ monitoring/
 ## Uninstall
 
 ```bash
-sudo bash install-alloy.sh --uninstall
+sudo bash install-alloy.sh -uninstall
+
+# Or remotely:
+curl -fsSL https://raw.githubusercontent.com/rohioffl/Alloy/main/install-alloy.sh | \
+  sudo bash -s -- -uninstall
 ```
 
 ---
