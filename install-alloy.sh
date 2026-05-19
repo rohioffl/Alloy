@@ -16,7 +16,6 @@
 # Flags:
 #   -remote-write=URL    Prometheus remote_write endpoint (required)
 #   -loki=URL            Loki push endpoint (optional)
-#   -probes=TARGETS      Comma-separated host:port or "auto" (default: auto)
 #   -processes=NAMES     Comma-separated process names or "auto" (default: auto)
 #   -uninstall           Remove Alloy and stop services
 #   -help                Show this help
@@ -27,7 +26,6 @@ set -euo pipefail
 # ---- Defaults ----------------------------------------------------------------
 REMOTE_WRITE_URL="${REMOTE_WRITE_URL:-}"
 LOKI_URL="${LOKI_URL:-}"
-PROBE_TARGETS="${PROBE_TARGETS:-auto}"
 PROCESS_NAMES="${PROCESS_NAMES:-auto}"
 
 # ---- Parse flags -------------------------------------------------------------
@@ -35,7 +33,6 @@ for arg in "$@"; do
   case "$arg" in
     -remote-write=*)  REMOTE_WRITE_URL="${arg#*=}" ;;
     -loki=*)          LOKI_URL="${arg#*=}" ;;
-    -probes=*)        PROBE_TARGETS="${arg#*=}" ;;
     -processes=*)     PROCESS_NAMES="${arg#*=}" ;;
     -uninstall|--uninstall|-u) DO_UNINSTALL=1 ;;
     -help|--help|-h) sed -n '2,22p' "$0" 2>/dev/null || true; exit 0 ;;
@@ -121,34 +118,13 @@ REPOEOF
 fi
 
 # ---- Step 2: Auto-discover --------------------------------------------------
-log "Discovering ports and processes..."
-
-discover_ports() {
-  local ports=""
-  if command -v ss >/dev/null 2>&1; then
-    ports=$(ss -tlnp 2>/dev/null | awk 'NR>1 {print $4}' | grep -oE '[0-9]+$' | sort -un)
-  elif command -v netstat >/dev/null 2>&1; then
-    ports=$(netstat -tlnp 2>/dev/null | awk 'NR>2 {print $4}' | grep -oE '[0-9]+$' | sort -un)
-  fi
-  local result=""
-  for port in $ports; do
-    [ "$port" -gt 32767 ] && continue
-    result="${result}localhost:${port},"
-  done
-  echo "${result%,}"
-}
+log "Discovering processes..."
 
 discover_processes() {
   ps -eo comm= 2>/dev/null | sort -u | grep -vE '^\[|^$' | \
     grep -iE 'alloy|grafana|prometheus|node_exporter|nginx|apache|httpd|mysql|mysqld|postgres|redis|mongo|docker|containerd|sshd|systemd|java|python|node|php|haproxy|caddy|traefik|consul|vault|nomad|etcd|kubelet|coredns' | \
     head -20
 }
-
-if [ "$PROBE_TARGETS" = "auto" ]; then
-  PROBE_TARGETS=$(discover_ports)
-  [ -z "$PROBE_TARGETS" ] && PROBE_TARGETS="localhost:22"
-  ok "Ports: $PROBE_TARGETS"
-fi
 
 PROCESS_MATCHERS=""
 if [ "$PROCESS_NAMES" = "auto" ]; then
@@ -175,21 +151,6 @@ else
   }"
   done
 fi
-
-# Build probe targets
-PROBE_CONFIG=""
-IFS=',' read -ra TARGETS <<< "$PROBE_TARGETS"
-for target in "${TARGETS[@]}"; do
-  target=$(echo "$target" | xargs)
-  [ -z "$target" ] && continue
-  name=$(echo "$target" | tr ':.' '_')
-  PROBE_CONFIG="${PROBE_CONFIG}
-  target {
-    name    = \"${name}\"
-    address = \"${target}\"
-    module  = \"tcp_connect\"
-  }"
-done
 
 # ---- Step 3: Write Alloy config ----------------------------------------------
 log "Writing Alloy config..."
@@ -228,10 +189,9 @@ prometheus.scrape "process_metrics" {
   scrape_interval = "15s"
 }
 
-// PORT MONITORING
+// PORT MONITORING (managed via Port Monitor API :9099)
 prometheus.exporter.blackbox "endpoints" {
   config = "{ modules: { tcp_connect: { prober: tcp, timeout: 5s }, http_2xx: { prober: http, timeout: 5s, http: { preferred_ip_protocol: ip4, follow_redirects: true } } } }"
-${PROBE_CONFIG}
 }
 
 prometheus.scrape "blackbox_metrics" {
@@ -335,6 +295,8 @@ echo ""
 echo "  Alloy UI:       http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo localhost):12345"
 echo "  Remote Write:   ${REMOTE_WRITE_URL}"
 echo "  Config:         /etc/alloy/config.alloy"
+echo ""
+echo "  Ports: Add from Grafana Ports dashboard (no ports monitored by default)"
 echo ""
 echo "  Uninstall:  curl -fsSL https://raw.githubusercontent.com/rohioffl/Alloy/main/install-alloy.sh | sudo bash -s -- -uninstall"
 echo ""
