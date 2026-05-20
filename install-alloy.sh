@@ -27,6 +27,8 @@ set -euo pipefail
 REMOTE_WRITE_URL="${REMOTE_WRITE_URL:-}"
 LOKI_URL="${LOKI_URL:-}"
 PROCESS_NAMES="${PROCESS_NAMES:-auto}"
+ACCOUNT="${ACCOUNT:-}"
+NODE_NAME="${NODE_NAME:-}"
 
 # ---- Parse flags -------------------------------------------------------------
 for arg in "$@"; do
@@ -34,6 +36,8 @@ for arg in "$@"; do
     -remote-write=*)  REMOTE_WRITE_URL="${arg#*=}" ;;
     -loki=*)          LOKI_URL="${arg#*=}" ;;
     -processes=*)     PROCESS_NAMES="${arg#*=}" ;;
+    -account=*)       ACCOUNT="${arg#*=}" ;;
+    -name=*)          NODE_NAME="${arg#*=}" ;;
     -uninstall|--uninstall|-u) DO_UNINSTALL=1 ;;
     -help|--help|-h) sed -n '2,22p' "$0" 2>/dev/null || true; exit 0 ;;
     *) ;;
@@ -156,6 +160,13 @@ fi
 log "Writing Alloy config..."
 mkdir -p /etc/alloy
 
+# Create empty probe targets file if it doesn't exist (ports added from dashboard)
+[ -f /etc/alloy/probe-targets.json ] || echo '[]' > /etc/alloy/probe-targets.json
+
+# Derive central API URL from remote_write URL (same host, port 9099)
+CENTRAL_HOST=$(echo "$REMOTE_WRITE_URL" | sed -E 's|https?://([^:/]+).*|\1|')
+PORT_API_URL="http://${CENTRAL_HOST}:9099"
+
 cat > /etc/alloy/config.alloy << ALLOYEOF
 // Grafana Alloy - Node Agent
 // Generated on $(date -Iseconds)
@@ -189,9 +200,17 @@ prometheus.scrape "process_metrics" {
   scrape_interval = "15s"
 }
 
-// PORT MONITORING (managed via Port Monitor API :9099)
+// PORT MONITORING (pulls targets from central server every 30s)
+// Add/remove ports from Grafana dashboard — no SSH needed.
+remote.http "probe_targets" {
+  url            = "${PORT_API_URL}/targets/$(hostname)"
+  poll_frequency = "30s"
+  method         = "GET"
+}
+
 prometheus.exporter.blackbox "endpoints" {
-  config = "{ modules: { tcp_connect: { prober: tcp, timeout: 5s }, http_2xx: { prober: http, timeout: 5s, http: { preferred_ip_protocol: ip4, follow_redirects: true } } } }"
+  config  = "{ modules: { tcp_connect: { prober: tcp, timeout: 5s }, http_2xx: { prober: http, timeout: 5s, http: { preferred_ip_protocol: ip4, follow_redirects: true } } } }"
+  targets = json_decode(remote.http.probe_targets.body)
 }
 
 prometheus.scrape "blackbox_metrics" {
@@ -220,6 +239,10 @@ prometheus.remote_write "central" {
       max_samples_per_send = 2000
       batch_send_deadline  = "5s"
     }
+  }
+  external_labels = {
+    $([ -n "$ACCOUNT" ] && echo "account = \"${ACCOUNT}\",")
+    $([ -n "$NODE_NAME" ] && echo "node_name = \"${NODE_NAME}\",")
   }
 }
 
@@ -286,6 +309,22 @@ fi
 
 if curl -s -o /dev/null -w "%{http_code}" -X POST "${REMOTE_WRITE_URL}" 2>/dev/null | grep -q "400\|415"; then
   ok "Remote write endpoint reachable"
+fi
+
+# ---- Step 6: Register with central API --------------------------------------
+CENTRAL_HOST=$(echo "$REMOTE_WRITE_URL" | sed -E 's|https?://([^:/]+).*|\1|')
+NODE_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")
+NODE_HOSTNAME=$(hostname 2>/dev/null || echo "unknown")
+
+log "Registering with central server..."
+REG_RESULT=$(curl -s -X POST "http://${CENTRAL_HOST}:9099/nodes/register" \
+  -H "Content-Type: application/json" \
+  -d "{\"hostname\":\"${NODE_HOSTNAME}\",\"ip\":\"${NODE_IP}\",\"account\":\"${ACCOUNT}\",\"name\":\"${NODE_NAME}\"}" 2>/dev/null || echo "")
+
+if echo "$REG_RESULT" | grep -q "Registered"; then
+  ok "Registered as '${NODE_HOSTNAME}' (${NODE_IP})${ACCOUNT:+ — account: $ACCOUNT}"
+else
+  warn "Could not register with central API (http://${CENTRAL_HOST}:9099) — node will still send metrics"
 fi
 
 # ---- Done --------------------------------------------------------------------
