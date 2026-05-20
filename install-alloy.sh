@@ -210,7 +210,7 @@ remote.http "probe_targets" {
 
 prometheus.exporter.blackbox "endpoints" {
   config  = "{ modules: { tcp_connect: { prober: tcp, timeout: 5s }, http_2xx: { prober: http, timeout: 5s, http: { preferred_ip_protocol: ip4, follow_redirects: true } } } }"
-  targets = json_decode(remote.http.probe_targets.body)
+  targets = json_decode(remote.http.probe_targets.content)
 }
 
 prometheus.scrape "blackbox_metrics" {
