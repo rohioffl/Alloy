@@ -131,15 +131,47 @@ sleep 2
 systemctl is-active --quiet port-monitor-api || die "API failed: journalctl -u port-monitor-api -n 20"
 ok "Central Monitoring API on :9099"
 
+# ---- Step 2b: Alloy on central host (metrics for this server) ----------------
+log "Step 2b: Installing Alloy on central host..."
+
+INSTALL_SCRIPT="${SCRIPT_DIR}/install-alloy.sh"
+if [ -f "$INSTALL_SCRIPT" ]; then
+  bash "$INSTALL_SCRIPT" \
+    -remote-write=http://127.0.0.1:9090/api/v1/write \
+    -api-url="http://127.0.0.1:9099" \
+    -loki="${GRAFANA_URL%/}/loki/api/v1/push" \
+    -install-token="${INSTALL_TOKEN}" \
+    -client=internal \
+    -account=default || warn "Alloy install had warnings — check: journalctl -u alloy -n 30"
+  systemctl enable alloy 2>/dev/null || true
+  systemctl is-active --quiet alloy && ok "Alloy running on central host" || warn "Alloy not running — run install-alloy.sh manually"
+else
+  warn "install-alloy.sh not found — skip central Alloy agent"
+fi
+
 # ---- Step 3: Grafana dashboards ----------------------------------------------
 log "Step 3: Deploying Grafana dashboards..."
 
-INFINITY_UID="cfmmi8ef0wxz4a"
+INFINITY_UID=""
+PROM_UID="PBFA97CFB590B2093"
+API_DS_URL="http://127.0.0.1:9099"
 if [ -n "$GRAFANA_API_KEY" ]; then
-  INFINITY_UID=$(curl -s "${GRAFANA_URL%/}/api/datasources/name/Port%20Monitor%20API" \
-    -H "Authorization: Bearer ${GRAFANA_API_KEY}" 2>/dev/null | \
-    python3 -c "import sys,json; print(json.load(sys.stdin).get('uid','') or 'cfmmi8ef0wxz4a')" 2>/dev/null || echo "cfmmi8ef0wxz4a")
-  [ -z "$INFINITY_UID" ] && INFINITY_UID="cfmmi8ef0wxz4a"
+  GAPI="${GRAFANA_URL%/}/api"
+  AUTH=(-H "Authorization: Bearer ${GRAFANA_API_KEY}")
+
+  PROM_UID=$(curl -s "${GAPI}/datasources/name/Prometheus" "${AUTH[@]}" 2>/dev/null | \
+    python3 -c "import sys,json; print(json.load(sys.stdin).get('uid','') or 'PBFA97CFB590B2093')" 2>/dev/null || echo "PBFA97CFB590B2093")
+
+  INFINITY_UID=$(curl -s "${GAPI}/datasources/name/Port%20Monitor%20API" "${AUTH[@]}" 2>/dev/null | \
+    python3 -c "import sys,json; print(json.load(sys.stdin).get('uid',''))" 2>/dev/null || true)
+  if [ -z "$INFINITY_UID" ]; then
+    log "Creating Infinity datasource (Port Monitor API)..."
+    INFINITY_UID=$(curl -s -X POST "${GAPI}/datasources" "${AUTH[@]}" \
+      -H "Content-Type: application/json" \
+      -d "{\"name\":\"Port Monitor API\",\"type\":\"yesoreyeram-infinity-datasource\",\"access\":\"proxy\",\"url\":\"${API_DS_URL}\",\"isDefault\":false}" 2>/dev/null | \
+      python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('datasource',{}).get('uid') or d.get('uid',''))" 2>/dev/null || true)
+  fi
+  [ -z "$INFINITY_UID" ] && INFINITY_UID="cfmmi8ef0wxz4a" && warn "Infinity datasource missing — install yesoreyeram-infinity-datasource plugin in Grafana"
 
   DASHBOARD_DIR="${SCRIPT_DIR}/dashboards"
   [ -d "$DASHBOARD_DIR" ] || DASHBOARD_DIR="/tmp/alloy-setup/dashboards"
@@ -153,7 +185,8 @@ if [ -n "$GRAFANA_API_KEY" ]; then
     [ -f "$f" ] || continue
     tmpdash=$(mktemp)
     sed -e "s|__MONITOR_API_PUBLIC_URL__|${API_PUBLIC_URL}|g" \
-        -e "s|__INFINITY_DS_UID__|${INFINITY_UID}|g" "$f" > "$tmpdash"
+        -e "s|__INFINITY_DS_UID__|${INFINITY_UID}|g" \
+        -e "s|__PROM_DS_UID__|${PROM_UID}|g" "$f" > "$tmpdash"
     result=$(curl -s -X POST "${GRAFANA_URL%/}/api/dashboards/db" \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer ${GRAFANA_API_KEY}" \

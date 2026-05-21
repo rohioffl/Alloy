@@ -30,6 +30,7 @@ Config: /etc/port-monitor/config.json  {"public_url": "http://x.x.x.x:9099"}
 import fcntl
 import json
 import os
+import re
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
@@ -37,7 +38,9 @@ from urllib.parse import parse_qs, unquote, urlparse
 DATA_DIR = os.environ.get("MONITOR_DATA_DIR", "/var/lib/port-monitor")
 CONFIG_FILE = os.environ.get("MONITOR_CONFIG", "/etc/port-monitor/config.json")
 NODES_FILE = os.path.join(DATA_DIR, "nodes.json")
+TAXONOMY_FILE = os.path.join(DATA_DIR, "taxonomy.json")
 LISTEN_PORT = int(os.environ.get("MONITOR_PORT", "9099"))
+PROMETHEUS_URL = os.environ.get("MONITOR_PROMETHEUS_URL", "http://127.0.0.1:9090").rstrip("/")
 TIMESTAMP = lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
@@ -95,6 +98,18 @@ def load_ports(host):
     return _read_json(get_port_file(host), [])
 
 
+def alloy_targets(host):
+    """Blackbox target list for Alloy (label-safe port names)."""
+    return [
+        {
+            "name": sanitize_port_name(t["name"]),
+            "address": t["address"],
+            "module": t.get("module", "tcp_connect"),
+        }
+        for t in load_ports(host)
+    ]
+
+
 def save_ports(host, targets):
     _write_json(get_port_file(host), targets)
 
@@ -118,6 +133,12 @@ def normalize_host(hostname):
     return (hostname or "").strip()
 
 
+def sanitize_port_name(name):
+    """Prometheus/Alloy label-safe port name (used as blackbox job → port label)."""
+    s = re.sub(r"[^a-zA-Z0-9_.-]+", "_", (name or "").strip())
+    return s.strip("_") or "port"
+
+
 def probe_address(host, port, addr=None):
     """Build blackbox target address using the server's registered IP."""
     if addr and str(addr).strip():
@@ -132,7 +153,7 @@ def prom_hosts():
     try:
         import urllib.request
 
-        with urllib.request.urlopen("http://localhost:9090/api/v1/label/host/values", timeout=2) as r:
+        with urllib.request.urlopen(f"{PROMETHEUS_URL}/api/v1/label/host/values", timeout=2) as r:
             return json.loads(r.read()).get("data", [])
     except Exception:
         return []
@@ -155,6 +176,215 @@ def node_client(n):
 
 def node_account(n):
     return (n.get("account") or "").strip() or DEFAULT_ACCOUNT
+
+
+def load_taxonomy():
+    default = {"clients": [DEFAULT_CLIENT], "accounts": {DEFAULT_CLIENT: [DEFAULT_ACCOUNT]}}
+    tax = _read_json(TAXONOMY_FILE, default)
+    tax.setdefault("clients", default["clients"])
+    tax.setdefault("accounts", default["accounts"])
+    return tax
+
+
+def save_taxonomy(tax):
+    _write_json(TAXONOMY_FILE, tax)
+
+
+def sync_taxonomy_from_nodes():
+    """Keep taxonomy in sync with all registered servers (clients/accounts always listable)."""
+    tax = load_taxonomy()
+    clients = set(tax.get("clients", []))
+    accounts = dict(tax.get("accounts", {}))
+    for n in load_nodes():
+        c, a, _ = normalize_metadata(n.get("client", ""), n.get("account", ""), "")
+        clients.add(c)
+        accounts.setdefault(c, [])
+        if a not in accounts[c]:
+            accounts[c] = sorted(set(accounts[c]) | {a})
+    tax["clients"] = sorted(clients)
+    tax["accounts"] = {k: sorted(set(v)) for k, v in accounts.items()}
+    save_taxonomy(tax)
+
+
+def record_taxonomy(client="", account=""):
+    c, a, _ = normalize_metadata(client, account, "")
+    tax = load_taxonomy()
+    clients = set(tax.get("clients", []))
+    clients.add(c)
+    tax["clients"] = sorted(clients)
+    accounts = tax.setdefault("accounts", {})
+    accts = set(accounts.get(c, []))
+    accts.add(a)
+    accounts[c] = sorted(accts)
+    save_taxonomy(tax)
+
+
+def list_all_clients():
+    sync_taxonomy_from_nodes()
+    nodes = load_nodes()
+    tax = load_taxonomy()
+    return sorted({node_client(n) for n in nodes} | set(tax.get("clients", [])))
+
+
+def list_accounts_for_client(client=""):
+    sync_taxonomy_from_nodes()
+    client = (client or "").strip()
+    if client in ("", ".*", "$__all", "All"):
+        nodes = load_nodes()
+        tax = load_taxonomy()
+        from_nodes = {node_account(n) for n in nodes}
+        from_tax = {a for accs in tax.get("accounts", {}).values() for a in accs}
+        return sorted(from_nodes | from_tax | {DEFAULT_ACCOUNT})
+    client = client or DEFAULT_CLIENT
+    nodes = load_nodes()
+    from_nodes = {node_account(n) for n in nodes if node_client(n) == client}
+    tax = load_taxonomy()
+    from_tax = set(tax.get("accounts", {}).get(client, []))
+    return sorted(from_nodes | from_tax | {DEFAULT_ACCOUNT})
+
+
+def taxonomy_overview():
+    sync_taxonomy_from_nodes()
+    nodes = load_nodes()
+    clients = []
+    for c in list_all_clients():
+        accs = []
+        for a in list_accounts_for_client(c):
+            accs.append({
+                "name": a,
+                "server_count": sum(1 for n in nodes if node_client(n) == c and node_account(n) == a),
+            })
+        clients.append({
+            "name": c,
+            "server_count": sum(1 for n in nodes if node_client(n) == c),
+            "accounts": accs,
+        })
+    return {"clients": clients, "total_servers": len(nodes)}
+
+
+def _migrate_servers(client_from, client_to, account_from=None, account_to=None):
+    client_to = (client_to or "").strip() or DEFAULT_CLIENT
+    account_to = (account_to or "").strip() or DEFAULT_ACCOUNT
+    nodes = load_nodes()
+    moved = 0
+    for n in nodes:
+        if node_client(n) != client_from:
+            continue
+        if account_from is not None and node_account(n) != account_from:
+            continue
+        n["client"] = client_to
+        n["account"] = account_to
+        moved += 1
+    if moved:
+        save_nodes(nodes)
+        record_taxonomy(client_to, account_to)
+    return moved
+
+
+def add_taxonomy_client(name):
+    raw = (name or "").strip()
+    if not raw:
+        return None, "client name is required"
+    c, _, _ = normalize_metadata(raw, "", "")
+    if raw.lower() == "unassigned":
+        c = DEFAULT_CLIENT
+    tax = load_taxonomy()
+    clients = set(tax.get("clients", []))
+    clients.add(c)
+    tax["clients"] = sorted(clients)
+    tax.setdefault("accounts", {}).setdefault(c, [])
+    if DEFAULT_ACCOUNT not in tax["accounts"][c]:
+        tax["accounts"][c] = sorted(set(tax["accounts"][c]) | {DEFAULT_ACCOUNT})
+    save_taxonomy(tax)
+    return c, None
+
+
+def rename_taxonomy_client(old, new):
+    old = (old or "").strip()
+    new = (new or "").strip()
+    if not new:
+        return "new name required"
+    if old == new:
+        return None
+    c_new, _, _ = normalize_metadata(new, "", "")
+    _migrate_servers(old, c_new)
+    tax = load_taxonomy()
+    if old in tax.get("accounts", {}):
+        tax["accounts"][c_new] = sorted(set(tax["accounts"].get(c_new, [])) | set(tax["accounts"].pop(old)))
+    clients = {c_new if x == old else x for x in tax.get("clients", [])}
+    tax["clients"] = sorted(clients | {c_new})
+    save_taxonomy(tax)
+    return None
+
+
+def delete_taxonomy_client(name, merge_into=None):
+    name = (name or "").strip()
+    if name in (DEFAULT_CLIENT,):
+        return "cannot delete default client"
+    nodes = load_nodes()
+    count = sum(1 for n in nodes if node_client(n) == name)
+    if count and not merge_into:
+        return f"{count} server(s) still use this client — pick “merge into” or reassign them first"
+    if merge_into:
+        _migrate_servers(name, merge_into.strip())
+    tax = load_taxonomy()
+    tax.get("accounts", {}).pop(name, None)
+    tax["clients"] = [c for c in tax.get("clients", []) if c != name]
+    save_taxonomy(tax)
+    return None
+
+
+def add_taxonomy_account(client, account):
+    c, a, _ = normalize_metadata(client, account, "")
+    tax = load_taxonomy()
+    tax.setdefault("clients", [])
+    if c not in tax["clients"]:
+        tax["clients"] = sorted(set(tax["clients"]) | {c})
+    accts = set(tax.setdefault("accounts", {}).get(c, []))
+    accts.add(a)
+    tax["accounts"][c] = sorted(accts)
+    save_taxonomy(tax)
+    return a, None
+
+
+def rename_taxonomy_account(client, old_acc, new_acc):
+    client = (client or "").strip() or DEFAULT_CLIENT
+    old_acc = (old_acc or "").strip()
+    new_acc = (new_acc or "").strip()
+    if not new_acc:
+        return "new name required"
+    _, a_new, _ = normalize_metadata(client, new_acc, "")
+    nodes = load_nodes()
+    for n in nodes:
+        if node_client(n) == client and node_account(n) == old_acc:
+            n["account"] = a_new
+    save_nodes(nodes)
+    tax = load_taxonomy()
+    accts = set(tax.setdefault("accounts", {}).get(client, []))
+    accts.discard(old_acc)
+    accts.add(a_new)
+    tax["accounts"][client] = sorted(accts)
+    save_taxonomy(tax)
+    record_taxonomy(client, a_new)
+    return None
+
+
+def delete_taxonomy_account(client, account, merge_into=None):
+    client = (client or "").strip() or DEFAULT_CLIENT
+    account = (account or "").strip()
+    if account in (DEFAULT_ACCOUNT,) and client == DEFAULT_CLIENT:
+        return "cannot delete default account under Unassigned"
+    nodes = load_nodes()
+    count = sum(1 for n in nodes if node_client(n) == client and node_account(n) == account)
+    if count and not merge_into:
+        return f"{count} server(s) use this account — merge into another account first"
+    if merge_into:
+        _migrate_servers(client, client, account, merge_into.strip())
+    tax = load_taxonomy()
+    accts = [a for a in tax.get("accounts", {}).get(client, []) if a != account]
+    tax.setdefault("accounts", {})[client] = accts
+    save_taxonomy(tax)
+    return None
 
 
 def filter_nodes(nodes, client="", account=""):
@@ -205,6 +435,38 @@ def _api_base_script():
     return "const API=window.location.origin;"
 
 
+COMBO_JS = r"""
+async function fetchClients(){
+  const r=await fetch(API+'/api/v1/variables/clients').then(x=>x.json()).catch(()=>[]);
+  return r.map(x=>x.__value||x);
+}
+async function fetchAccounts(client){
+  const u=API+'/api/v1/variables/accounts?client='+encodeURIComponent(client||'');
+  const r=await fetch(u).then(x=>x.json()).catch(()=>[]);
+  return r.map(x=>x.__value||x);
+}
+function fillCombo(selId,newId,values,current){
+  const sel=document.getElementById(selId),inp=document.getElementById(newId);
+  sel.innerHTML='';
+  (values||[]).forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});
+  const o=document.createElement('option');o.value='__new__';o.textContent='+ Add new…';sel.appendChild(o);
+  if(current&&(values||[]).includes(current)){sel.value=current;inp.style.display='none';inp.value='';}
+  else if(current){sel.value='__new__';inp.style.display='block';inp.value=current;}
+  else{sel.value=(values&&values[0])||'__new__';inp.style.display=sel.value==='__new__'?'block':'none';}
+}
+function onCombo(selId,newId,after){
+  const sel=document.getElementById(selId),inp=document.getElementById(newId);
+  if(sel.value==='__new__'){inp.style.display='block';inp.focus();}
+  else{inp.style.display='none';inp.value='';if(after)after();}
+}
+function comboVal(selId,newId){
+  const sel=document.getElementById(selId);
+  if(sel.value==='__new__')return document.getElementById(newId).value.trim();
+  return sel.value;
+}
+"""
+
+
 HTML = r"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Monitoring Manager</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -239,27 +501,15 @@ th{color:#666;font-weight:500}
 </div>
 
 <div id="servers" class="section active">
-<div class="card">
-<h2>Add server manually</h2>
-<div class="row">
-<div><label>Hostname *</label><input id="add-host" placeholder="e.g. prod-web-01"/></div>
-<div><label>Display name</label><input id="add-name" placeholder="e.g. Production Web"/></div>
-<div><label>IP address</label><input id="add-ip" placeholder="e.g. 10.0.1.5"/></div>
-<div><label>Client</label><input id="add-client" placeholder="e.g. acme-corp"/></div>
-<div><label>Account</label><input id="add-account" placeholder="e.g. production"/></div>
-</div>
-<button class="btn btn-primary" onclick="addServer()">+ Add server</button>
-<span id="add-status"></span>
-</div>
-<div class="card"><h2>Registered servers</h2><div id="tree"></div></div>
+<div class="card"><h2>Registered servers</h2><p class="sub" style="margin-bottom:10px">Install Alloy on a node to register it automatically.</p><div id="tree"></div></div>
 <div class="card">
 <h2>Edit selected server</h2>
 <div class="row">
 <div><label>Hostname</label><select id="edit-host" style="width:100%"></select></div>
 <div><label>Display name</label><input id="edit-name"/></div>
-<div><label>IP</label><input id="edit-ip"/></div>
-<div><label>Client</label><input id="edit-client"/></div>
-<div><label>Account</label><input id="edit-account"/></div>
+<div><label>IP (from install)</label><input id="edit-ip" readonly title="Set when Alloy registers; re-run install-alloy.sh to refresh"/></div>
+<div><label>Client</label><select id="edit-client-sel" style="width:100%" onchange="onCombo('edit-client-sel','edit-client-new',refreshEditAccounts)"></select><input id="edit-client-new" style="display:none;margin-top:6px;width:100%" placeholder="New client name"/></div>
+<div><label>Account</label><select id="edit-account-sel" style="width:100%" onchange="onCombo('edit-account-sel','edit-account-new')"></select><input id="edit-account-new" style="display:none;margin-top:6px;width:100%" placeholder="New account name"/></div>
 </div>
 <button class="btn btn-primary" onclick="saveServer()">Save</button>
 <button class="btn btn-danger" onclick="deleteServer()">Delete</button>
@@ -328,7 +578,7 @@ async function loadTree(){
     });
     html+='</div>';
   });
-  document.getElementById('tree').innerHTML=html||'<p style="color:#666">No servers yet. Add one above or install Alloy on a node.</p>';
+  document.getElementById('tree').innerHTML=html||'<p style="color:#666">No servers yet. Install Alloy on a node with install-alloy.sh.</p>';
   const sel=document.getElementById('edit-host');
   const prev=sel.value;
   sel.innerHTML='<option value="">— select —</option>';
@@ -336,28 +586,29 @@ async function loadTree(){
   if(prev)sel.value=prev;
 }
 
-function selectServer(h){
-  document.getElementById('edit-host').value=h;
-  j(API+'/api/v1/servers/'+encodeURIComponent(h)).then(n=>{
-    document.getElementById('edit-name').value=n.name||'';
-    document.getElementById('edit-client').value=n.client||'';
-    document.getElementById('edit-account').value=n.account||'';
-    document.getElementById('edit-ip').value=n.ip||'';
-  });
+async function refreshEditAccounts(){
+  const c=comboVal('edit-client-sel','edit-client-new');
+  const acc=await fetchAccounts(c);
+  fillCombo('edit-account-sel','edit-account-new',acc,document.getElementById('edit-account-sel').dataset.current||'');
 }
 
-async function addServer(){
-  const body={hostname:document.getElementById('add-host').value.trim(),name:document.getElementById('add-name').value.trim(),ip:document.getElementById('add-ip').value.trim(),client:document.getElementById('add-client').value.trim(),account:document.getElementById('add-account').value.trim()};
-  if(!body.hostname){setSt('add-status','Hostname required',false);return;}
-  const d=await j(API+'/api/v1/servers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  setSt('add-status',d.message||d.error,!d.error);
-  if(!d.error){['add-host','add-name','add-ip','add-client','add-account'].forEach(id=>document.getElementById(id).value='');loadTree();}
+function selectServer(h){
+  document.getElementById('edit-host').value=h;
+  j(API+'/api/v1/servers/'+encodeURIComponent(h)).then(async n=>{
+    document.getElementById('edit-name').value=n.name||'';
+    document.getElementById('edit-ip').value=n.ip||'';
+    const clients=await fetchClients();
+    fillCombo('edit-client-sel','edit-client-new',clients,n.client||'');
+    const acc=await fetchAccounts(n.client||'');
+    document.getElementById('edit-account-sel').dataset.current=n.account||'';
+    fillCombo('edit-account-sel','edit-account-new',acc,n.account||'');
+  });
 }
 
 async function saveServer(){
   const h=document.getElementById('edit-host').value;
   if(!h){setSt('status','Select a server',false);return;}
-  const body={name:document.getElementById('edit-name').value.trim(),client:document.getElementById('edit-client').value.trim(),account:document.getElementById('edit-account').value.trim(),ip:document.getElementById('edit-ip').value.trim()};
+  const body={name:document.getElementById('edit-name').value.trim(),client:comboVal('edit-client-sel','edit-client-new'),account:comboVal('edit-account-sel','edit-account-new')};
   const d=await j(API+'/api/v1/servers/'+encodeURIComponent(h),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   setSt('status',d.message||d.error,!d.error);loadTree();
 }
@@ -406,6 +657,7 @@ async function loadDocs(){
 }
 
 document.getElementById('edit-host').onchange=function(){if(this.value)selectServer(this.value);};
+__COMBO_JS__
 loadTree();
 </script></body></html>"""
 
@@ -429,11 +681,9 @@ input:read-only{opacity:.7}
 <div class="row">
 <div><label>Hostname</label><input id="hostname" readonly/></div>
 <div><label>Display name</label><input id="name" placeholder="e.g. Production Web 01"/></div>
-<div><label>Client</label><input id="client" list="clients" placeholder="e.g. acme-corp"/></div>
-<div><label>Account</label><input id="account" list="accounts" placeholder="e.g. production"/></div>
+<div><label>Client</label><select id="client-sel" style="width:100%" onchange="onCombo('client-sel','client-new',refreshNodeAccounts)"></select><input id="client-new" style="display:none;margin-top:6px;width:100%" placeholder="New client name"/></div>
+<div><label>Account</label><select id="account-sel" style="width:100%" onchange="onCombo('account-sel','account-new')"></select><input id="account-new" style="display:none;margin-top:6px;width:100%" placeholder="New account name"/></div>
 </div>
-<datalist id="clients"></datalist>
-<datalist id="accounts"></datalist>
 <div>
 <button class="btn" onclick="save()">Save to monitoring</button>
 <span id="status"></span>
@@ -442,13 +692,10 @@ input:read-only{opacity:.7}
 <script>
 __SCRIPT__
 const HOST=HOST_PARAM||new URLSearchParams(location.search).get('host')||'';
-async function loadLists(){
-  const clients=await fetch(API+'/api/v1/variables/clients').then(r=>r.json()).catch(()=>[]);
-  const dlC=document.getElementById('clients');dlC.innerHTML='';
-  clients.forEach(c=>{const o=document.createElement('option');o.value=c.__value;dlC.appendChild(o);});
-  const acc=await fetch(API+'/api/v1/variables/accounts?client=').then(r=>r.json()).catch(()=>[]);
-  const dlA=document.getElementById('accounts');dlA.innerHTML='';
-  acc.forEach(a=>{const o=document.createElement('option');o.value=a.__value;dlA.appendChild(o);});
+async function refreshNodeAccounts(){
+  const c=comboVal('client-sel','client-new');
+  const acc=await fetchAccounts(c);
+  fillCombo('account-sel','account-new',acc,document.getElementById('account-sel').dataset.current||'');
 }
 async function load(){
   document.getElementById('hostname').value=HOST||'';
@@ -457,18 +704,20 @@ async function load(){
     document.getElementById('status').style.color='#f59e0b';
     return;
   }
-  await loadLists();
   const n=await fetch(API+'/api/v1/servers/'+encodeURIComponent(HOST)).then(r=>r.json());
   document.getElementById('name').value=n.name||'';
-  document.getElementById('client').value=n.client||'';
-  document.getElementById('account').value=n.account||'';
+  const clients=await fetchClients();
+  fillCombo('client-sel','client-new',clients,n.client||'');
+  const acc=await fetchAccounts(n.client||'');
+  document.getElementById('account-sel').dataset.current=n.account||'';
+  fillCombo('account-sel','account-new',acc,n.account||'');
 }
 async function save(){
   if(!HOST)return;
   const body={
     name:document.getElementById('name').value.trim(),
-    client:document.getElementById('client').value.trim(),
-    account:document.getElementById('account').value.trim()
+    client:comboVal('client-sel','client-new'),
+    account:comboVal('account-sel','account-new')
   };
   const st=document.getElementById('status');
   const hint=document.getElementById('hint');
@@ -479,6 +728,7 @@ async function save(){
   st.textContent='Saved';st.style.color='#22c55e';
   hint.textContent='Refresh dashboard (F5) to update Client/Account filters';
 }
+__COMBO_JS__
 load();
 </script></body></html>"""
 
@@ -554,11 +804,27 @@ label{font-size:11px;color:#888;display:block;margin-bottom:4px}
 .btn{padding:8px 16px;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px}
 .btn-primary{background:#22c55e;color:#fff}
 .btn-secondary{background:#333;color:#ccc;margin-left:6px}
-#edit-status,#add-status{font-size:12px;margin-top:8px}
+#edit-status,#org-status{font-size:12px;margin-top:8px}
 .empty{color:#666;padding:24px;text-align:center}
+.mtabs{display:flex;gap:16px;margin-bottom:16px;border-bottom:1px solid #333;padding-bottom:8px}
+.mtab{color:#888;cursor:pointer;font-size:14px;padding:4px 0}.mtab.active{color:#fff;border-bottom:2px solid #f59e0b;font-weight:600}
+.org-grid{display:grid;grid-template-columns:220px 1fr;gap:16px}
+.org-list{list-style:none;max-height:420px;overflow:auto}
+.org-list li{padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
+.org-list li:hover,.org-list li.active{background:#1f2937}
+.org-list .cnt{font-size:10px;color:#666}
+.btn-sm{padding:5px 10px;font-size:11px;margin-right:6px;margin-top:6px}
+.btn-danger{background:#ef4444;color:#fff}
+input[readonly]{opacity:.75;cursor:not-allowed}
+.hint-ip{font-size:10px;color:#666;margin-top:2px}
 </style></head><body>
-<h2>All servers</h2>
-<p class="sub">Registered and unassigned nodes — click a row to edit client, account, and display name.</p>
+<h2>Monitoring — All servers</h2>
+<div class="mtabs">
+<span class="mtab active" data-v="servers">Servers</span>
+<span class="mtab" data-v="org">Clients &amp; Accounts</span>
+</div>
+<div id="view-servers">
+<p class="sub">From Alloy install. IP is fixed at install — re-run <code>install-alloy.sh</code> on the node to refresh it.</p>
 <div class="toolbar">
 <input class="search" id="search" placeholder="Search hostname or name..." oninput="render()"/>
 <select id="filter-client" onchange="render()"><option value="">All clients</option></select>
@@ -580,45 +846,67 @@ label{font-size:11px;color:#888;display:block;margin-bottom:4px}
 <div id="edit-form" style="display:none">
 <div class="field"><label>Hostname</label><input id="e-host" readonly/></div>
 <div class="field"><label>Display name</label><input id="e-name" placeholder="e.g. Production API"/></div>
-<div class="field"><label>Client</label><input id="e-client" list="dl-clients" placeholder="e.g. acme"/></div>
-<div class="field"><label>Account</label><input id="e-account" list="dl-accounts" placeholder="e.g. production"/></div>
-<div class="field"><label>IP address</label><input id="e-ip" placeholder="e.g. 10.0.1.5"/></div>
+<div class="field"><label>Client</label><select id="e-client-sel" onchange="onCombo('e-client-sel','e-client-new',refreshEditAccounts)"></select><input id="e-client-new" style="display:none;margin-top:6px" placeholder="New client name"/></div>
+<div class="field"><label>Account</label><select id="e-account-sel" onchange="onCombo('e-account-sel','e-account-new')"></select><input id="e-account-new" style="display:none;margin-top:6px" placeholder="New account name"/></div>
+<div class="field"><label>IP address</label><input id="e-ip" readonly/><p class="hint-ip">Detected at install (primary interface)</p></div>
 <button class="btn btn-primary" onclick="saveEdit()">Save</button>
 <div id="edit-status"></div>
 </div>
-<hr style="border:none;border-top:1px solid #222;margin:16px 0"/>
-<h3>Add server manually</h3>
-<div class="field"><label>Hostname *</label><input id="a-host" placeholder="hostname"/></div>
-<div class="field"><label>Display name</label><input id="a-name" placeholder="optional"/></div>
-<div class="field"><label>Client</label><input id="a-client" list="dl-clients"/></div>
-<div class="field"><label>Account</label><input id="a-account" list="dl-accounts"/></div>
-<div class="field"><label>IP</label><input id="a-ip" placeholder="optional"/></div>
-<button class="btn btn-primary" onclick="addServer()">+ Add server</button>
-<div id="add-status"></div>
 </div>
 </div>
-<datalist id="dl-clients"></datalist>
-<datalist id="dl-accounts"></datalist>
+</div>
+<div id="view-org" style="display:none">
+<p class="sub">Manage the client → account hierarchy used in Grafana filters. Rename or merge to reassign all servers at once.</p>
+<div class="org-grid">
+<div class="panel">
+<h3>Clients</h3>
+<button class="btn btn-primary btn-sm" onclick="orgAddClient()">+ New client</button>
+<ul class="org-list" id="org-clients"></ul>
+</div>
+<div class="panel">
+<h3 id="org-detail-title">Select a client</h3>
+<div id="org-detail" style="display:none">
+<div style="margin-bottom:12px">
+<button class="btn btn-secondary btn-sm" onclick="orgRenameClient()">Rename</button>
+<button class="btn btn-secondary btn-sm" onclick="orgMergeClient()">Merge into…</button>
+<button class="btn btn-danger btn-sm" onclick="orgDeleteClient()">Delete</button>
+</div>
+<h3 style="font-size:12px;color:#888;margin:12px 0 8px">Accounts</h3>
+<button class="btn btn-primary btn-sm" onclick="orgAddAccount()">+ New account</button>
+<table style="margin-top:10px"><thead><tr><th>Account</th><th>Servers</th><th></th></tr></thead><tbody id="org-accounts"></tbody></table>
+</div>
+<div id="org-status"></div>
+</div>
+</div>
+</div>
 <script>
 __SCRIPT__
-let servers=[], selected=null;
+__COMBO_JS__
+document.querySelectorAll('.mtab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.mtab').forEach(x=>x.classList.toggle('active',x===t));
+  document.getElementById('view-servers').style.display=t.dataset.v==='servers'?'block':'none';
+  document.getElementById('view-org').style.display=t.dataset.v==='org'?'block':'none';
+  if(t.dataset.v==='org')loadOrg();
+});
+let servers=[], selected=null, orgData=null, orgClient=null;
+async function refreshEditAccounts(){
+  const c=comboVal('e-client-sel','e-client-new');
+  const acc=await fetchAccounts(c);
+  fillCombo('e-account-sel','e-account-new',acc,document.getElementById('e-account-sel').dataset.current||'');
+}
 async function load(){
   const d=await fetch(API+'/api/v1/servers').then(r=>r.json());
   servers=d.servers||[];
-  const clients=[...new Set(servers.map(s=>s.client||'Unassigned'))].sort();
+  const clients=await fetchClients();
   const fc=document.getElementById('filter-client');
   const prevC=fc.value;fc.innerHTML='<option value="">All clients</option>';
   clients.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;fc.appendChild(o);});
   if(prevC)fc.value=prevC;
-  const accounts=[...new Set(servers.filter(s=>!fc.value||s.client===fc.value).map(s=>s.account||'default'))].sort();
+  const accounts=await fetchAccounts(fc.value||'');
   const fa=document.getElementById('filter-account');
   const prevA=fa.value;fa.innerHTML='<option value="">All accounts</option>';
   accounts.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;fa.appendChild(o);});
   if(prevA)fa.value=prevA;
-  const dlC=document.getElementById('dl-clients');dlC.innerHTML='';
-  clients.forEach(c=>{const o=document.createElement('option');o.value=c;dlC.appendChild(o);});
-  const dlA=document.getElementById('dl-accounts');dlA.innerHTML='';
-  accounts.forEach(a=>{const o=document.createElement('option');o.value=a;dlA.appendChild(o);});
   render();
 }
 function filtered(){
@@ -651,7 +939,7 @@ function render(){
     tb.appendChild(tr);
   });
 }
-function selectServer(host){
+async function selectServer(host){
   selected=host;
   render();
   const s=servers.find(x=>x.hostname===host);
@@ -660,26 +948,103 @@ function selectServer(host){
   document.getElementById('edit-hint').textContent='Editing '+host;
   document.getElementById('e-host').value=s.hostname;
   document.getElementById('e-name').value=s.name||'';
-  document.getElementById('e-client').value=s.client||'';
-  document.getElementById('e-account').value=s.account||'';
   document.getElementById('e-ip').value=s.ip||'';
+  const clients=await fetchClients();
+  fillCombo('e-client-sel','e-client-new',clients,s.client||'');
+  const acc=await fetchAccounts(s.client||'');
+  document.getElementById('e-account-sel').dataset.current=s.account||'';
+  fillCombo('e-account-sel','e-account-new',acc,s.account||'');
 }
 async function saveEdit(){
   const host=document.getElementById('e-host').value;
   const st=document.getElementById('edit-status');
-  const body={name:document.getElementById('e-name').value.trim(),client:document.getElementById('e-client').value.trim(),account:document.getElementById('e-account').value.trim(),ip:document.getElementById('e-ip').value.trim()};
+  const body={name:document.getElementById('e-name').value.trim(),client:comboVal('e-client-sel','e-client-new'),account:comboVal('e-account-sel','e-account-new')};
   const d=await fetch(API+'/api/v1/servers/'+encodeURIComponent(host),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());
   st.textContent=d.message||d.error;st.style.color=d.error?'#ef4444':'#22c55e';
   if(!d.error)load().then(()=>selectServer(host));
 }
-async function addServer(){
-  const st=document.getElementById('add-status');
-  const body={hostname:document.getElementById('a-host').value.trim(),name:document.getElementById('a-name').value.trim(),client:document.getElementById('a-client').value.trim(),account:document.getElementById('a-account').value.trim(),ip:document.getElementById('a-ip').value.trim()};
-  if(!body.hostname){st.textContent='Hostname required';st.style.color='#f59e0b';return;}
-  const d=await fetch(API+'/api/v1/servers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());
-  st.textContent=d.message||d.error;st.style.color=d.error?'#ef4444':'#22c55e';
-  if(!d.error){['a-host','a-name','a-client','a-account','a-ip'].forEach(id=>document.getElementById(id).value='');load().then(()=>selectServer(body.hostname));}
+function orgStatus(msg,ok){const e=document.getElementById('org-status');e.textContent=msg;e.style.color=ok?'#22c55e':'#ef4444';}
+async function loadOrg(){
+  orgData=await fetch(API+'/api/v1/taxonomy').then(r=>r.json());
+  const ul=document.getElementById('org-clients');ul.innerHTML='';
+  (orgData.clients||[]).forEach(c=>{
+    const li=document.createElement('li');
+    li.className=orgClient===c.name?'active':'';
+    li.innerHTML=`<span>${c.name}</span><span class="cnt">${c.server_count}</span>`;
+    li.onclick=()=>{orgClient=c.name;loadOrg();};
+    ul.appendChild(li);
+  });
+  if(!orgClient&&orgData.clients&&orgData.clients.length)orgClient=orgData.clients[0].name;
+  const cur=(orgData.clients||[]).find(x=>x.name===orgClient);
+  document.getElementById('org-detail').style.display=cur?'block':'none';
+  document.getElementById('org-detail-title').textContent=cur?('Client: '+cur.name):'Select a client';
+  const tb=document.getElementById('org-accounts');tb.innerHTML='';
+  if(cur)(cur.accounts||[]).forEach(a=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${a.name}</td><td>${a.server_count}</td><td class="org-acc-actions"></td>`;
+    const td=tr.querySelector('.org-acc-actions');
+    [['Rename','rename'],['Merge','merge'],['Delete','del']].forEach(([label,act])=>{
+      const b=document.createElement('button');
+      b.className=(act==='del'?'btn btn-danger btn-sm':'btn btn-secondary btn-sm');
+      b.textContent=label;
+      b.dataset.act=act;
+      b.dataset.account=a.name;
+      b.onclick=()=>orgAccountAction(act,a.name);
+      td.appendChild(b);
+    });
+    tb.appendChild(tr);
+  });
 }
+function orgAccountAction(act,name){
+  if(act==='rename')return orgRenameAccount(name);
+  if(act==='merge')return orgMergeAccount(name);
+  return orgDeleteAccount(name);
+}
+async function orgAddClient(){
+  const n=prompt('New client name:');if(!n)return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){orgClient=d.name||n.trim();await loadOrg();await load();}
+}
+async function orgRenameClient(){
+  if(!orgClient)return;
+  const n=prompt('Rename client to:',orgClient);if(!n||n===orgClient)return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_name:n})}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){orgClient=n.trim();await loadOrg();await load();}
+}
+async function orgMergeClient(){
+  if(!orgClient)return;
+  const t=prompt('Merge all servers from "'+orgClient+'" into client:');if(!t)return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient)+'?merge_into='+encodeURIComponent(t),{method:'DELETE'}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){orgClient=t.trim();await loadOrg();await load();}
+}
+async function orgDeleteClient(){
+  if(!orgClient)return;
+  if(!confirm('Delete client "'+orgClient+'"? Servers must be merged or reassigned first.'))return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient),{method:'DELETE'}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){orgClient=null;await loadOrg();await load();}
+}
+async function orgAddAccount(){
+  if(!orgClient)return;
+  const n=prompt('New account name under '+orgClient+':');if(!n)return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient)+'/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){await loadOrg();await load();}
+}
+async function orgRenameAccount(oldName){
+  const n=prompt('Rename account to:',oldName);if(!n||n===oldName)return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient)+'/accounts/'+encodeURIComponent(oldName),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_name:n})}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){await loadOrg();await load();}
+}
+async function orgMergeAccount(oldName){
+  const t=prompt('Merge account "'+oldName+'" into:');if(!t)return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient)+'/accounts/'+encodeURIComponent(oldName)+'?merge_into='+encodeURIComponent(t),{method:'DELETE'}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){await loadOrg();await load();}
+}
+async function orgDeleteAccount(name){
+  if(!confirm('Delete account "'+name+'"?'))return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient)+'/accounts/'+encodeURIComponent(name),{method:'DELETE'}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){await loadOrg();await load();}
+}
+document.getElementById('filter-client').onchange=async function(){await load();};
 load();
 </script></body></html>"""
 
@@ -702,6 +1067,8 @@ API_DOCS = {
         {"method": "GET", "path": "/api/v1/variables/clients", "description": "Grafana client dropdown"},
         {"method": "GET", "path": "/api/v1/variables/accounts?client=", "description": "Grafana account dropdown"},
         {"method": "GET", "path": "/api/v1/variables/hosts?client=&account=", "description": "Grafana host dropdown"},
+        {"method": "GET", "path": "/api/v1/variables/ports?host=", "description": "Grafana port dropdown"},
+        {"method": "GET", "path": "/api/v1/taxonomy", "description": "Clients and accounts overview"},
     ],
 }
 
@@ -720,10 +1087,9 @@ class Handler(BaseHTTPRequestHandler):
         allowed.discard("")
         if origin and origin in allowed:
             return origin
-        # Grafana (:3000) saving to API (:9099) — allow browser cross-origin
-        if origin:
-            return origin
-        return "*"
+        if not origin and allowed:
+            return next(iter(allowed))
+        return ""
 
     def _auth_header(self):
         key = self.headers.get("X-Monitor-Key", "")
@@ -751,12 +1117,19 @@ class Handler(BaseHTTPRequestHandler):
     def _is_port_path(self, path):
         return "/ports" in path
 
+    def _is_taxonomy_path(self, path):
+        return path.startswith("/api/v1/taxonomy")
+
     def _require_write_auth(self, path=""):
-        """API key only for destructive/manual API calls — not Grafana dashboard edits."""
+        """API key for destructive ops; metadata/ports open for Grafana iframe (same-origin/CORS)."""
         expected = api_key()
         if not expected:
             return True
         if self._is_metadata_path(path) or self._is_port_path(path):
+            return True
+        if self._is_taxonomy_path(path) and self.command == "DELETE":
+            return self._auth_header() == expected
+        if self._is_taxonomy_path(path):
             return True
         return self._auth_header() == expected
 
@@ -776,7 +1149,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _html(self, content):
         script = _api_base_script()
-        body = content.replace("__SCRIPT__", script).encode()
+        body = content.replace("__SCRIPT__", script).replace("__COMBO_JS__", COMBO_JS).encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -814,7 +1187,13 @@ class Handler(BaseHTTPRequestHandler):
             docs["public_url"] = load_config().get("public_url", "")
             return self._json(200, docs)
         if path == "/api/v1/config":
-            return self._json(200, load_config())
+            cfg = load_config()
+            return self._json(200, {
+                "public_url": cfg.get("public_url", ""),
+                "grafana_url": cfg.get("grafana_url", ""),
+                "has_install_token": bool(cfg.get("install_token")),
+                "has_api_key": bool(cfg.get("api_key")),
+            })
 
         # ---- v1 servers ----
         if path == "/api/v1/servers":
@@ -839,18 +1218,27 @@ class Handler(BaseHTTPRequestHandler):
             if len(parts) == 6 and parts[5] == "ports":
                 return self._json(200, {"host": host, "ports": load_ports(host), "count": len(load_ports(host))})
             if len(parts) == 6 and parts[5] == "targets":
-                return self._json(200, load_ports(host))
+                return self._json(200, alloy_targets(host))
+
+        # ---- taxonomy (clients & accounts) ----
+        if path == "/api/v1/taxonomy":
+            return self._json(200, taxonomy_overview())
 
         # ---- v1 variables ----
         if path == "/api/v1/variables/clients":
-            clients = sorted({node_client(n) for n in load_nodes()})
+            clients = list_all_clients()
             return self._json(200, [{"__text": c, "__value": c} for c in clients])
         if path == "/api/v1/variables/accounts":
-            nodes = filter_nodes(load_nodes(), client=flat.get("client", ""))
-            accounts = sorted({node_account(n) for n in nodes})
+            accounts = list_accounts_for_client(flat.get("client", ""))
             return self._json(200, [{"__text": a, "__value": a} for a in accounts])
         if path == "/api/v1/variables/hosts":
             return self._json(200, self._hosts_variable(flat))
+        if path == "/api/v1/variables/ports":
+            host = normalize_host(flat.get("host", ""))
+            if not host:
+                return self._json(200, [])
+            targets = load_ports(host)
+            return self._json(200, [{"__text": t["name"], "__value": sanitize_port_name(t["name"])} for t in targets])
 
         # ---- legacy ----
         if path == "/nodes":
@@ -862,14 +1250,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/hosts-list":
             return self._json(200, self._hosts_variable(flat, include_unregistered=flat.get("include_unregistered", "").lower() in ("1", "true", "yes")))
         if path == "/clients-list":
-            clients = sorted({node_client(n) for n in load_nodes()})
+            clients = list_all_clients()
             return self._json(200, [{"__text": c, "__value": c} for c in clients])
         if path == "/accounts-list":
-            nodes = filter_nodes(load_nodes(), client=flat.get("client", ""))
-            accounts = sorted({node_account(n) for n in nodes})
+            accounts = list_accounts_for_client(flat.get("client", ""))
             return self._json(200, [{"__text": a, "__value": a} for a in accounts])
         if path.startswith("/targets/"):
-            return self._json(200, load_ports(unquote(path[9:])))
+            return self._json(200, alloy_targets(unquote(path[9:])))
         if path.startswith("/metadata/"):
             host = unquote(path[10:])
             node = find_node(load_nodes(), host) or {}
@@ -905,6 +1292,19 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(401, {"error": "invalid or missing X-Monitor-Key"})
             return self._register_server(data, auto=False)
 
+        if path == "/api/v1/taxonomy/clients":
+            c, err = add_taxonomy_client(data.get("name", ""))
+            if err:
+                return self._json(400, {"error": err})
+            return self._json(201, {"message": f"Client '{c}' added", "name": c})
+
+        parts = [unquote(p) for p in path.split("/") if p]
+        if len(parts) == 6 and parts[:3] == ["api", "v1", "taxonomy"] and parts[3] == "clients" and parts[5] == "accounts":
+            acc, err = add_taxonomy_account(parts[4], data.get("name", ""))
+            if err:
+                return self._json(400, {"error": err})
+            return self._json(201, {"message": f"Account '{acc}' added under '{parts[4]}'", "name": acc})
+
         if path.startswith("/api/v1/servers/") and path.endswith("/ports"):
             host = unquote(path.split("/")[4])
             return self._add_port(host, data)
@@ -939,6 +1339,7 @@ class Handler(BaseHTTPRequestHandler):
                 existing["name"] = nm
             existing["last_seen"] = TIMESTAMP()
             save_nodes(nodes)
+            record_taxonomy(existing["client"], existing["account"])
             return self._json(200, {"message": f"Updated {host}", "hostname": host})
 
         c, a, nm = normalize_metadata(data.get("client", ""), data.get("account", ""), data.get("name", ""))
@@ -953,12 +1354,25 @@ class Handler(BaseHTTPRequestHandler):
         }
         nodes.append(entry)
         save_nodes(nodes)
+        record_taxonomy(c, a)
         code = 201 if auto else 201
         return self._json(code, {"message": f"{'Registered' if auto else 'Added'} {host}", "hostname": host})
 
     def do_PUT(self):
         path, _ = self._path_query()
         data = self._body()
+
+        parts = [unquote(p) for p in path.split("/") if p]
+        if len(parts) == 5 and parts[:3] == ["api", "v1", "taxonomy"] and parts[3] == "clients":
+            err = rename_taxonomy_client(parts[4], data.get("new_name", ""))
+            if err:
+                return self._json(400, {"error": err})
+            return self._json(200, {"message": f"Client renamed to '{data.get('new_name')}'"})
+        if len(parts) == 7 and parts[:3] == ["api", "v1", "taxonomy"] and parts[3] == "clients" and parts[5] == "accounts":
+            err = rename_taxonomy_account(parts[4], parts[6], data.get("new_name", ""))
+            if err:
+                return self._json(400, {"error": err})
+            return self._json(200, {"message": f"Account renamed to '{data.get('new_name')}'"})
 
         if path.startswith("/api/v1/servers/"):
             host = unquote(path.split("/")[4])
@@ -972,8 +1386,7 @@ class Handler(BaseHTTPRequestHandler):
         if not existing:
             existing = {"hostname": host, "registered": TIMESTAMP()}
             nodes.append(existing)
-        if "ip" in data:
-            existing["ip"] = data["ip"]
+        # IP is set only at Alloy install/register — not editable from dashboards
         c, a, nm = normalize_metadata(
             data.get("client", existing.get("client", "")),
             data.get("account", existing.get("account", "")),
@@ -988,6 +1401,7 @@ class Handler(BaseHTTPRequestHandler):
         if data.get("hostname") and data["hostname"] != host:
             existing["hostname"] = normalize_host(data["hostname"])
         save_nodes(nodes)
+        record_taxonomy(existing.get("client", ""), existing.get("account", ""))
         return self._json(200, {"message": f"Saved {existing['hostname']}", "hostname": existing["hostname"]})
 
     def _add_port(self, host, data):
@@ -999,7 +1413,7 @@ class Handler(BaseHTTPRequestHandler):
         if created:
             save_nodes(nodes)
 
-        name = (data.get("name") or "").strip()
+        name = sanitize_port_name((data.get("name") or "").strip())
         port = str(data.get("port", "")).strip()
         addr = (data.get("address") or "").strip()
         module = data.get("module", "tcp_connect")
@@ -1007,19 +1421,20 @@ class Handler(BaseHTTPRequestHandler):
         if not addr and not port:
             return self._json(400, {"error": "port or address required"})
         if not name:
-            name = f"port_{port or addr.split(':')[-1]}"
+            name = sanitize_port_name(f"port_{port or addr.split(':')[-1]}")
 
         address = probe_address(host, port, addr)
         targets = load_ports(host)
-        if any(t["name"] == name for t in targets):
+        if any(sanitize_port_name(t["name"]) == name for t in targets):
             return self._json(409, {"error": f"port '{name}' already exists"})
         targets.append({"name": name, "address": address, "module": module})
         save_ports(host, targets)
         return self._json(201, {"message": f"Added '{name}' → {address}", "name": name, "address": address})
 
     def do_DELETE(self):
-        path, _ = self._path_query()
+        path, flat = self._path_query()
         parts = [unquote(p) for p in path.split("/") if p]
+        merge_into = (flat.get("merge_into") or [""])[0]
 
         if len(parts) >= 4 and parts[0] == "api" and parts[1] == "v1" and parts[2] == "servers":
             host = parts[3]
@@ -1030,7 +1445,20 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(401, {"error": "invalid or missing X-Monitor-Key"})
                 return self._delete_server(host)
 
+        if len(parts) == 5 and parts[:3] == ["api", "v1", "taxonomy"] and parts[3] == "clients":
+            err = delete_taxonomy_client(parts[4], merge_into=merge_into or None)
+            if err:
+                return self._json(400, {"error": err})
+            return self._json(200, {"message": "Client removed"})
+        if len(parts) == 7 and parts[:3] == ["api", "v1", "taxonomy"] and parts[3] == "clients" and parts[5] == "accounts":
+            err = delete_taxonomy_account(parts[4], parts[6], merge_into=merge_into or None)
+            if err:
+                return self._json(400, {"error": err})
+            return self._json(200, {"message": "Account removed"})
+
         if len(parts) == 2 and parts[0] == "nodes":
+            if not self._require_write_auth(path):
+                return self._json(401, {"error": "invalid or missing X-Monitor-Key"})
             return self._delete_server(parts[1])
         if len(parts) == 3 and parts[0] == "ports":
             return self._delete_port(parts[1], parts[2])
@@ -1051,7 +1479,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _delete_port(self, host, name):
         targets = load_ports(host)
-        filtered = [t for t in targets if t["name"] != name]
+        filtered = [t for t in targets if sanitize_port_name(t["name"]) != sanitize_port_name(name)]
         if len(filtered) == len(targets):
             return self._json(404, {"error": "not found"})
         save_ports(host, filtered)

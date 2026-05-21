@@ -20,7 +20,7 @@ Central API :9099 ◄── GET /targets ───  polls every 30s for port lis
 
 | Dashboard | Purpose |
 |-----------|---------|
-| **All Servers** | Full list (assigned + Unassigned) — edit name, client, account inline |
+| **All Servers** | Server list + **Clients & Accounts** org manager (rename/merge); IP read-only |
 | **Server Drill-Down (Summary)** | Health overview per host |
 | **CPU / Memory / Disks / Network / Ports / Processes** | Deep dives per host |
 
@@ -43,7 +43,8 @@ This installs:
 - Prometheus `remote_write` receiver
 - Central Monitoring API with **install token** + **API key** in `/etc/port-monitor/config.json` (mode `600`)
 - All Grafana dashboards in folder **Monitoring**
-- Grafana HTML panels enabled (for embedded server editor)
+- **Alloy on the central host** (so Grafana server appears in metrics)
+- Grafana HTML panels enabled (for embedded inventory iframe)
 
 At the end, the script prints an **install token**. Copy it — every node install needs it.
 
@@ -98,9 +99,10 @@ sudo bash install-alloy.sh \
 |------|---------|-------------|
 | `-remote-write=URL` | required | Central Prometheus `.../api/v1/write` |
 | `-install-token=TOKEN` | — | From central `config.json` or `setup-server.sh` output |
+| `-api-url=URL` | `http://CENTRAL_HOST:9099` | Central Monitoring API (use if API is not on :9099) |
 | `-loki=URL` | central Grafana Loki | Log shipping (optional) |
 | `-processes=NAMES` | `auto` | Comma-separated process names to monitor |
-| `-uninstall` | — | Remove Alloy completely |
+| `-uninstall` | — | Remove Alloy agent only (does not remove central API) |
 
 Optional `-client`, `-account`, and `-name` exist but **prefer setting those in Grafana** after install.
 
@@ -110,11 +112,18 @@ Within ~30 seconds the node sends metrics and registers with the API. Open **All
 
 ## Set client, account & display name (in Grafana)
 
-**Recommended:** open **All Servers** — full list with inline editor.
+**Recommended:** open **All Servers** (`/d/alloy-servers/all-servers`).
 
-1. Open **All Servers** (`/d/alloy-servers/all-servers`)
-2. Click any row (including **Unassigned**)
-3. Edit **Display name**, **Client**, **Account**, **IP** → **Save**
+**Servers tab**
+
+1. Click a row → edit **Display name**, **Client**, **Account** (dropdown or “+ Add new…”)
+2. **IP is read-only** (set at Alloy install; re-run `install-alloy.sh` on the node to refresh)
+3. **Save**
+
+**Clients & Accounts tab**
+
+- Add/rename/merge/delete clients and accounts
+- Renaming or merging **reassigns all servers** under that client/account
 
 Or per host in **Server Drill-Down (Summary)**:
 
@@ -160,6 +169,9 @@ monitoring/
 ├── setup-server.sh        # Central server (run once)
 ├── install-alloy.sh       # Node agent (run on every server)
 ├── port-monitor-api.py    # Central API
+├── scripts/
+│   ├── patch-alloy-port-probes.sh  # Fix per-port labels on existing nodes
+│   └── fix-dashboards.py           # Normalize dashboard placeholders
 └── dashboards/            # Grafana dashboards
 ```
 
@@ -178,3 +190,13 @@ curl http://localhost:9099/api/v1/servers
 # Metrics flowing?
 curl -s 'http://localhost:9090/api/v1/query?query=up{job="integrations/unix"}'
 ```
+
+**Dropdowns empty (Client/Host)?** Grafana needs the **Infinity** datasource pointing at `http://127.0.0.1:9099` (no trailing slash). Re-run `setup-server.sh` or check **Connections → Data sources → Port Monitor API**.
+
+**Ports show one line / `integrations/unix`?** On each node, patch Alloy so port probes keep a `port` label:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rohioffl/Alloy/main/scripts/patch-alloy-port-probes.sh | sudo bash
+```
+
+Then wait ~30s and refresh the Ports dashboard.

@@ -31,11 +31,13 @@ ACCOUNT="${ACCOUNT:-default}"
 CLIENT="${CLIENT:-Unassigned}"
 NODE_NAME="${NODE_NAME:-}"
 INSTALL_TOKEN="${INSTALL_TOKEN:-}"
+PORT_API_URL="${PORT_API_URL:-}"
 
 # ---- Parse flags -------------------------------------------------------------
 for arg in "$@"; do
   case "$arg" in
     -remote-write=*)  REMOTE_WRITE_URL="${arg#*=}" ;;
+    -api-url=*)       PORT_API_URL="${arg#*=}" ;;
     -loki=*)          LOKI_URL="${arg#*=}" ;;
     -processes=*)     PROCESS_NAMES="${arg#*=}" ;;
     -account=*)       ACCOUNT="${arg#*=}" ;;
@@ -61,11 +63,9 @@ die()  { printf "\033[1;31m ✘ %s\033[0m\n" "$*" >&2; exit 1; }
 uninstall() {
   log "Uninstalling Grafana Alloy completely..."
   systemctl disable --now alloy 2>/dev/null || true
-  systemctl disable --now port-monitor-api 2>/dev/null || true
-  rm -f /etc/alloy/config.alloy /etc/alloy/probe-targets.json
+  rm -f /etc/alloy/config.alloy
   rm -rf /etc/alloy
   rm -rf /etc/systemd/system/alloy.service.d
-  rm -f /etc/systemd/system/port-monitor-api.service
   rm -rf /var/lib/alloy
   rm -f /etc/apt/sources.list.d/grafana.list
   rm -f /etc/apt/keyrings/grafana.gpg
@@ -164,12 +164,10 @@ fi
 log "Writing Alloy config..."
 mkdir -p /etc/alloy
 
-# Create empty probe targets file if it doesn't exist (ports added from dashboard)
-[ -f /etc/alloy/probe-targets.json ] || echo '[]' > /etc/alloy/probe-targets.json
-
-# Derive central API URL from remote_write URL (same host, port 9099)
+# Derive central API URL from remote_write URL unless -api-url is set
 CENTRAL_HOST=$(echo "$REMOTE_WRITE_URL" | sed -E 's|https?://([^:/]+).*|\1|')
-PORT_API_URL="http://${CENTRAL_HOST}:9099"
+PORT_API_URL="${PORT_API_URL:-http://${CENTRAL_HOST}:9099}"
+PORT_API_URL="${PORT_API_URL%/}"
 
 cat > /etc/alloy/config.alloy << ALLOYEOF
 // Grafana Alloy - Node Agent
@@ -219,11 +217,29 @@ prometheus.exporter.blackbox "endpoints" {
 
 prometheus.scrape "blackbox_metrics" {
   targets         = prometheus.exporter.blackbox.endpoints.targets
-  forward_to      = [prometheus.relabel.add_host_label.receiver]
+  forward_to      = [prometheus.relabel.blackbox_labels.receiver]
   scrape_interval = "15s"
 }
 
-// RELABELING
+// RELABELING — host metrics use integrations/unix; port probes keep per-port identity
+prometheus.relabel "blackbox_labels" {
+  forward_to = [prometheus.remote_write.central.receiver]
+
+  rule {
+    target_label = "host"
+    replacement  = constants.hostname
+  }
+  // Blackbox sets job to the target name (Backend-api, Redis, …); copy to port label
+  rule {
+    source_labels = ["job"]
+    target_label  = "port"
+  }
+  rule {
+    target_label = "job"
+    replacement  = "blackbox"
+  }
+}
+
 prometheus.relabel "add_host_label" {
   forward_to = [prometheus.remote_write.central.receiver]
 
@@ -289,6 +305,11 @@ ok "Config: /etc/alloy/config.alloy"
 # ---- Step 4: Start Alloy ----------------------------------------------------
 log "Starting Alloy..."
 
+cat > /etc/default/alloy << 'DEFEOF'
+CONFIG_FILE=/etc/alloy/config.alloy
+CUSTOM_ARGS=
+DEFEOF
+
 mkdir -p /etc/systemd/system/alloy.service.d
 cat > /etc/systemd/system/alloy.service.d/override.conf << 'EOF'
 [Service]
@@ -321,21 +342,20 @@ if curl -s -o /dev/null -w "%{http_code}" -X POST "${REMOTE_WRITE_URL}" 2>/dev/n
 fi
 
 # ---- Step 6: Register with central API --------------------------------------
-CENTRAL_HOST=$(echo "$REMOTE_WRITE_URL" | sed -E 's|https?://([^:/]+).*|\1|')
 NODE_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")
 NODE_HOSTNAME=$(hostname 2>/dev/null || echo "unknown")
 
 log "Registering with central server..."
 REG_HEADERS=(-H "Content-Type: application/json")
 [ -n "$INSTALL_TOKEN" ] && REG_HEADERS+=(-H "X-Install-Token: ${INSTALL_TOKEN}")
-REG_RESULT=$(curl -s -X POST "http://${CENTRAL_HOST}:9099/api/v1/servers/register" \
+REG_RESULT=$(curl -s -X POST "${PORT_API_URL}/api/v1/servers/register" \
   "${REG_HEADERS[@]}" \
   -d "{\"hostname\":\"${NODE_HOSTNAME}\",\"ip\":\"${NODE_IP}\",\"account\":\"${ACCOUNT}\",\"client\":\"${CLIENT}\",\"name\":\"${NODE_NAME}\"}" 2>/dev/null || echo "")
 
-if echo "$REG_RESULT" | grep -q "Registered"; then
-  ok "Registered as '${NODE_HOSTNAME}' (${NODE_IP}) — set name/client/account in Grafana Summary dashboard"
+if echo "$REG_RESULT" | grep -qiE 'Registered|Updated|Added'; then
+  ok "Registered as '${NODE_HOSTNAME}' (${NODE_IP}) — set name/client/account in Grafana All Servers"
 else
-  warn "Could not register with central API (http://${CENTRAL_HOST}:9099) — node will still send metrics"
+  warn "Could not register with central API (${PORT_API_URL}) — node will still send metrics"
 fi
 
 # ---- Done --------------------------------------------------------------------
