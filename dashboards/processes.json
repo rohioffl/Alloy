@@ -8,13 +8,17 @@
     "templating": {
       "list": [
         {
-          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+          "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "__INFINITY_DS_UID__"},
           "includeAll": false,
           "label": "Host",
           "name": "host",
-          "query": {"query": "label_values(node_uname_info{job=\"integrations/unix\"}, host)", "refId": "StandardVariableQuery"},
-          "refresh": 2,
-          "sort": 1,
+          "query": {
+            "infinityQuery": {"refId": "variable", "source": "url", "type": "json", "url": "http://localhost:9099/api/v1/variables/hosts?client=&account="},
+            "queryType": "infinity",
+            "type": "infinity"
+          },
+          "refresh": 1,
+          "sort": 0,
           "type": "query"
         },
         {

@@ -1,36 +1,32 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Grafana Server Setup — Central Monitoring Server
+# Grafana Server Setup — Central Monitoring Server (production)
 #
-# Sets up the central monitoring server with:
-#   - Port Monitor API (:9099) — manages probe targets for all nodes
-#   - Grafana dashboards — deploys all drill-down dashboards
-#   - Prometheus remote_write receiver — accepts metrics from nodes
-#
-# Run this ONCE on your central Grafana/Prometheus server.
+# Sets up:
+#   - Prometheus remote_write receiver
+#   - Central Monitoring API (:9099) with install token
+#   - Grafana dashboards (8 total: All Servers + drill-down suite)
 #
 # Usage:
-#   wget https://raw.githubusercontent.com/rohioffl/Alloy/main/setup-server.sh
-#   sudo bash setup-server.sh -grafana-url=http://localhost:3000 \
-#                              -grafana-key=glsa_xxxxx
-#
-# Flags:
-#   -grafana-url=URL     Grafana base URL (default: http://localhost:3000)
-#   -grafana-key=TOKEN   Grafana service account token (required for dashboards)
-#   -help                Show this help
+#   sudo bash setup-server.sh \
+#     -grafana-url=http://localhost:3000 \
+#     -grafana-key=glsa_xxxxx \
+#     -api-public-url=http://YOUR_PUBLIC_IP:9099
 # =============================================================================
 
 set -euo pipefail
 
 GRAFANA_URL="${GRAFANA_URL:-http://localhost:3000}"
 GRAFANA_API_KEY="${GRAFANA_API_KEY:-}"
+API_PUBLIC_URL="${API_PUBLIC_URL:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo /tmp)"
 
 for arg in "$@"; do
   case "$arg" in
-    -grafana-url=*)  GRAFANA_URL="${arg#*=}" ;;
-    -grafana-key=*)  GRAFANA_API_KEY="${arg#*=}" ;;
-    -help|--help|-h) sed -n '2,22p' "$0" 2>/dev/null || true; exit 0 ;;
+    -grafana-url=*)     GRAFANA_URL="${arg#*=}" ;;
+    -grafana-key=*)     GRAFANA_API_KEY="${arg#*=}" ;;
+    -api-public-url=*)  API_PUBLIC_URL="${arg#*=}" ;;
+    -help|--help|-h) sed -n '2,18p' "$0" 2>/dev/null || true; exit 0 ;;
     *) ;;
   esac
 done
@@ -42,7 +38,7 @@ die()  { printf "\033[1;31m ✘ %s\033[0m\n" "$*" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || die "Run as root (sudo)."
 
-# ---- Step 1: Enable Prometheus remote_write receiver -------------------------
+# ---- Step 1: Prometheus remote_write -----------------------------------------
 log "Step 1: Enabling Prometheus remote_write receiver..."
 
 PROM_OVERRIDE="/etc/systemd/system/prometheus.service.d/remote-write.conf"
@@ -73,31 +69,57 @@ else
   warn "Prometheus not running — skipping remote_write setup"
 fi
 
-# ---- Step 2: Install Port Monitor API ----------------------------------------
-log "Step 2: Installing Port Monitor API..."
+# ---- Step 2: Central Monitoring API ------------------------------------------
+log "Step 2: Installing Central Monitoring API..."
 
 API_SRC="${SCRIPT_DIR}/port-monitor-api.py"
 API_DEST="/opt/port-monitor-api.py"
-
-if [ -f "$API_SRC" ]; then
-  cp "$API_SRC" "$API_DEST"
-else
+[ -f "$API_SRC" ] && cp "$API_SRC" "$API_DEST" || \
   curl -fsSL "https://raw.githubusercontent.com/rohioffl/Alloy/main/port-monitor-api.py" -o "$API_DEST"
+
+mkdir -p /var/lib/port-monitor/ports /etc/port-monitor
+chmod 700 /etc/port-monitor
+
+SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
+API_PUBLIC_URL="${API_PUBLIC_URL:-http://${SERVER_IP}:9099}"
+
+# Preserve existing tokens on re-run
+INSTALL_TOKEN=""
+API_KEY=""
+if [ -f /etc/port-monitor/config.json ]; then
+  INSTALL_TOKEN=$(python3 -c "import json; print(json.load(open('/etc/port-monitor/config.json')).get('install_token',''))" 2>/dev/null || true)
+  API_KEY=$(python3 -c "import json; print(json.load(open('/etc/port-monitor/config.json')).get('api_key',''))" 2>/dev/null || true)
 fi
+[ -z "$INSTALL_TOKEN" ] && INSTALL_TOKEN=$(openssl rand -hex 24)
+[ -z "$API_KEY" ] && API_KEY=$(openssl rand -hex 24)
 
-mkdir -p /var/lib/port-monitor
+cat > /etc/port-monitor/config.json << EOF
+{
+  "public_url": "${API_PUBLIC_URL}",
+  "grafana_url": "${GRAFANA_URL%/}",
+  "install_token": "${INSTALL_TOKEN}",
+  "api_key": "${API_KEY}"
+}
+EOF
+chmod 600 /etc/port-monitor/config.json
 
-cat > /etc/systemd/system/port-monitor-api.service << 'EOF'
+cat > /etc/systemd/system/port-monitor-api.service << EOF
 [Unit]
-Description=Port Monitor API — Central server
-After=network-online.target
+Description=Central Monitoring API
+After=network-online.target prometheus.service
 Wants=network-online.target
 
 [Service]
 Type=simple
+Environment=MONITOR_CONFIG=/etc/port-monitor/config.json
+Environment=MONITOR_PUBLIC_URL=${API_PUBLIC_URL}
+Environment=MONITOR_GRAFANA_URL=${GRAFANA_URL%/}
+Environment=MONITOR_INSTALL_TOKEN=${INSTALL_TOKEN}
+Environment=MONITOR_API_KEY=${API_KEY}
 ExecStart=/usr/bin/python3 /opt/port-monitor-api.py
 Restart=on-failure
 RestartSec=5s
+LimitNOFILE=65535
 
 [Install]
 WantedBy=multi-user.target
@@ -106,77 +128,76 @@ EOF
 systemctl daemon-reload
 systemctl enable --now port-monitor-api
 sleep 2
+systemctl is-active --quiet port-monitor-api || die "API failed: journalctl -u port-monitor-api -n 20"
+ok "Central Monitoring API on :9099"
 
-if systemctl is-active --quiet port-monitor-api; then
-  ok "Port Monitor API running on :9099"
-else
-  die "Port Monitor API failed. Check: journalctl -u port-monitor-api -n 20"
-fi
-
-# ---- Step 3: Deploy Grafana dashboards ---------------------------------------
+# ---- Step 3: Grafana dashboards ----------------------------------------------
 log "Step 3: Deploying Grafana dashboards..."
 
-if [ -z "$GRAFANA_API_KEY" ]; then
-  warn "No -grafana-key provided — skipping dashboard deployment"
-  warn "Run with: sudo bash setup-server.sh -grafana-key=glsa_xxxxx"
-else
+INFINITY_UID="cfmmi8ef0wxz4a"
+if [ -n "$GRAFANA_API_KEY" ]; then
+  INFINITY_UID=$(curl -s "${GRAFANA_URL%/}/api/datasources/name/Port%20Monitor%20API" \
+    -H "Authorization: Bearer ${GRAFANA_API_KEY}" 2>/dev/null | \
+    python3 -c "import sys,json; print(json.load(sys.stdin).get('uid','') or 'cfmmi8ef0wxz4a')" 2>/dev/null || echo "cfmmi8ef0wxz4a")
+  [ -z "$INFINITY_UID" ] && INFINITY_UID="cfmmi8ef0wxz4a"
+
   DASHBOARD_DIR="${SCRIPT_DIR}/dashboards"
+  [ -d "$DASHBOARD_DIR" ] || DASHBOARD_DIR="/tmp/alloy-setup/dashboards"
 
-  if [ ! -d "$DASHBOARD_DIR" ]; then
-    warn "dashboards/ folder not found — cloning from GitHub..."
-    git clone --depth=1 https://github.com/rohioffl/Alloy.git /tmp/alloy-setup 2>/dev/null
-    DASHBOARD_DIR="/tmp/alloy-setup/dashboards"
-  fi
-
-  # Create Monitoring folder
-  curl -s -X POST "$GRAFANA_URL/api/folders" \
+  curl -s -X POST "${GRAFANA_URL%/}/api/folders" \
     -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $GRAFANA_API_KEY" \
+    -H "Authorization: Bearer ${GRAFANA_API_KEY}" \
     -d '{"uid":"monitoring","title":"Monitoring"}' >/dev/null 2>&1 || true
 
-  # Deploy each dashboard
   for f in "$DASHBOARD_DIR"/*.json; do
     [ -f "$f" ] || continue
-    result=$(curl -s -X POST "$GRAFANA_URL/api/dashboards/db" \
+    tmpdash=$(mktemp)
+    sed -e "s|__MONITOR_API_PUBLIC_URL__|${API_PUBLIC_URL}|g" \
+        -e "s|__INFINITY_DS_UID__|${INFINITY_UID}|g" "$f" > "$tmpdash"
+    result=$(curl -s -X POST "${GRAFANA_URL%/}/api/dashboards/db" \
       -H "Content-Type: application/json" \
-      -H "Authorization: Bearer $GRAFANA_API_KEY" \
-      -d @"$f" 2>/dev/null)
-    status=$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','error'))" 2>/dev/null || echo "error")
-    uid=$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('uid',''))" 2>/dev/null || echo "")
-    if [ "$status" = "success" ]; then
-      ok "Dashboard: $uid"
-    else
-      warn "Failed: $(basename "$f")"
-    fi
+      -H "Authorization: Bearer ${GRAFANA_API_KEY}" \
+      -d @"$tmpdash")
+    rm -f "$tmpdash"
+    uid=$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('uid','error'))" 2>/dev/null)
+    status=$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','error'))" 2>/dev/null)
+    [ "$status" = "success" ] && ok "Dashboard: $uid" || warn "Failed: $(basename "$f")"
   done
 
-  # Enable HTML in Grafana text panels (needed for Port Manager iframe)
   GRAFANA_INI="/etc/grafana/grafana.ini"
-  if [ -f "$GRAFANA_INI" ]; then
-    if grep -q "^;disable_sanitize_html" "$GRAFANA_INI"; then
-      sed -i 's/^;disable_sanitize_html = false/disable_sanitize_html = true/' "$GRAFANA_INI"
-      systemctl restart grafana-server 2>/dev/null || true
-      ok "Grafana HTML panels enabled"
-    elif ! grep -q "^disable_sanitize_html = true" "$GRAFANA_INI"; then
+  if [ -f "$GRAFANA_INI" ] && ! grep -q "^disable_sanitize_html = true" "$GRAFANA_INI"; then
+    grep -q "^;disable_sanitize_html" "$GRAFANA_INI" && \
+      sed -i 's/^;disable_sanitize_html = false/disable_sanitize_html = true/' "$GRAFANA_INI" || \
       echo "disable_sanitize_html = true" >> "$GRAFANA_INI"
-      systemctl restart grafana-server 2>/dev/null || true
-      ok "Grafana HTML panels enabled"
-    else
-      ok "Grafana HTML panels already enabled"
-    fi
+    systemctl restart grafana-server 2>/dev/null || true
+    ok "Grafana HTML panels enabled (required for embedded server editor)"
   fi
+else
+  warn "No -grafana-key — skipping dashboard deploy"
 fi
 
 # ---- Done --------------------------------------------------------------------
-SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
 echo ""
-log "Central server setup complete!"
+log "Production central server ready"
 echo ""
-echo "  Port Monitor API:  http://${SERVER_IP}:9099/"
-echo "  Grafana:           ${GRAFANA_URL}"
-echo "  Prometheus:        http://${SERVER_IP}:9090"
+echo "  Grafana:        ${GRAFANA_URL}"
+echo "  Prometheus:     http://${SERVER_IP}:9090"
+echo "  Monitoring API: ${API_PUBLIC_URL}/"
 echo ""
-echo "  Install Alloy on nodes:"
-echo "    curl -fsSL https://raw.githubusercontent.com/rohioffl/Alloy/main/install-alloy.sh | \\"
-echo "      sudo bash -s -- -remote-write=http://${SERVER_IP}:9090/api/v1/write"
+echo "  Install token (save this — required for new nodes):"
+echo "    ${INSTALL_TOKEN}"
+echo ""
+echo "  API key (for curl / automation — optional):"
+echo "    ${API_KEY}"
+echo ""
+echo "  Install Alloy on a node (set name/client/account in Grafana after):"
+echo "    curl -fsSL .../install-alloy.sh | sudo bash -s -- \\"
+echo "      -remote-write=http://${SERVER_IP}:9090/api/v1/write \\"
+echo "      -install-token=${INSTALL_TOKEN}"
+echo ""
+echo "  Then in Grafana → Server Drill-Down → section"
+echo "  'Client · Account · Display Name — edit here'"
+echo ""
+echo "  Security: restrict port 9099 to your VPC/office (ufw/security group)."
+echo "  Dashboards: All Servers + Server Drill-Down (7 panels) — no separate admin dashboard."
 echo ""

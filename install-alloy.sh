@@ -27,8 +27,10 @@ set -euo pipefail
 REMOTE_WRITE_URL="${REMOTE_WRITE_URL:-}"
 LOKI_URL="${LOKI_URL:-}"
 PROCESS_NAMES="${PROCESS_NAMES:-auto}"
-ACCOUNT="${ACCOUNT:-}"
+ACCOUNT="${ACCOUNT:-default}"
+CLIENT="${CLIENT:-Unassigned}"
 NODE_NAME="${NODE_NAME:-}"
+INSTALL_TOKEN="${INSTALL_TOKEN:-}"
 
 # ---- Parse flags -------------------------------------------------------------
 for arg in "$@"; do
@@ -37,6 +39,8 @@ for arg in "$@"; do
     -loki=*)          LOKI_URL="${arg#*=}" ;;
     -processes=*)     PROCESS_NAMES="${arg#*=}" ;;
     -account=*)       ACCOUNT="${arg#*=}" ;;
+    -client=*)        CLIENT="${arg#*=}" ;;
+    -install-token=*) INSTALL_TOKEN="${arg#*=}" ;;
     -name=*)          NODE_NAME="${arg#*=}" ;;
     -uninstall|--uninstall|-u) DO_UNINSTALL=1 ;;
     -help|--help|-h) sed -n '2,22p' "$0" 2>/dev/null || true; exit 0 ;;
@@ -227,6 +231,10 @@ prometheus.relabel "add_host_label" {
     target_label = "host"
     replacement  = constants.hostname
   }
+  rule {
+    target_label = "job"
+    replacement  = "integrations/unix"
+  }
 }
 
 // REMOTE WRITE
@@ -241,7 +249,8 @@ prometheus.remote_write "central" {
     }
   }
   external_labels = {
-    $([ -n "$ACCOUNT" ] && echo "account = \"${ACCOUNT}\",")
+    client  = "${CLIENT}",
+    account = "${ACCOUNT}",
     $([ -n "$NODE_NAME" ] && echo "node_name = \"${NODE_NAME}\",")
   }
 }
@@ -317,19 +326,21 @@ NODE_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")
 NODE_HOSTNAME=$(hostname 2>/dev/null || echo "unknown")
 
 log "Registering with central server..."
-REG_RESULT=$(curl -s -X POST "http://${CENTRAL_HOST}:9099/nodes/register" \
-  -H "Content-Type: application/json" \
-  -d "{\"hostname\":\"${NODE_HOSTNAME}\",\"ip\":\"${NODE_IP}\",\"account\":\"${ACCOUNT}\",\"name\":\"${NODE_NAME}\"}" 2>/dev/null || echo "")
+REG_HEADERS=(-H "Content-Type: application/json")
+[ -n "$INSTALL_TOKEN" ] && REG_HEADERS+=(-H "X-Install-Token: ${INSTALL_TOKEN}")
+REG_RESULT=$(curl -s -X POST "http://${CENTRAL_HOST}:9099/api/v1/servers/register" \
+  "${REG_HEADERS[@]}" \
+  -d "{\"hostname\":\"${NODE_HOSTNAME}\",\"ip\":\"${NODE_IP}\",\"account\":\"${ACCOUNT}\",\"client\":\"${CLIENT}\",\"name\":\"${NODE_NAME}\"}" 2>/dev/null || echo "")
 
 if echo "$REG_RESULT" | grep -q "Registered"; then
-  ok "Registered as '${NODE_HOSTNAME}' (${NODE_IP})${ACCOUNT:+ — account: $ACCOUNT}"
+  ok "Registered as '${NODE_HOSTNAME}' (${NODE_IP}) — set name/client/account in Grafana Summary dashboard"
 else
   warn "Could not register with central API (http://${CENTRAL_HOST}:9099) — node will still send metrics"
 fi
 
 # ---- Done --------------------------------------------------------------------
 echo ""
-log "Done! This node will appear in Grafana within 30 seconds."
+log "Done! Open Grafana → Server Drill-Down → set Client, Account, and Display name for this host."
 echo ""
 echo "  Alloy UI:       http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo localhost):12345"
 echo "  Remote Write:   ${REMOTE_WRITE_URL}"

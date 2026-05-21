@@ -1,164 +1,126 @@
-# Grafana Alloy — Server Monitoring
+# Grafana Alloy — Server Monitoring (Production)
 
-Lightweight monitoring stack using **Grafana Alloy** as the only agent on each node.  
-No node_exporter, process-exporter, blackbox_exporter, or promtail needed.
+Centralized monitoring with **Grafana Alloy** on each node and a **Central Monitoring API** on the Grafana server for server names and port probes.
 
 ---
 
 ## Architecture
 
 ```
-┌──────────────────── Central Server ─────────────────────────┐
-│                                                              │
-│  Prometheus (:9090)  ← receives metrics from all nodes      │
-│  Grafana (:3000)     ← dashboards                           │
-│  Port Monitor API (:9099) ← manages probe targets per node  │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-         ▲ remote_write metrics          ▲ GET /targets/<host>
-         │                               │ (every 30s)
-┌────────┴──────── Node Server ──────────┴────────────────────┐
-│                                                              │
-│  Grafana Alloy (:12345)                                     │
-│    ├─ Host metrics    (CPU, mem, disk, net, load)           │
-│    ├─ Process monitor (per-process CPU/mem/threads)         │
-│    ├─ Port probing    (pulls targets from central API)      │
-│    └─ Log collection  (syslog, auth.log → Loki)            │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+Central Server                          Node (Alloy)
+─────────────────                       ─────────────
+Prometheus :9090  ◄── remote_write ───  unix + process + blackbox metrics
+Grafana :3000                             │
+Central API :9099 ◄── GET /targets ───  polls every 30s for port list
 ```
+
+**Dashboards (7 only — no separate admin dashboard):**
+
+| Dashboard | Purpose |
+|-----------|---------|
+| **All Servers** | Full list (assigned + Unassigned) — edit name, client, account inline |
+| **Server Drill-Down (Summary)** | Health overview per host |
+| **CPU / Memory / Disks / Network / Ports / Processes** | Deep dives per host |
 
 ---
 
-## Setup
-
-### Step 1 — Central Server (run once)
+## Production setup (central server)
 
 ```bash
-git clone https://github.com/rohioffl/Alloy.git /tmp/alloy-setup
-sudo bash /tmp/alloy-setup/setup-server.sh \
+sudo bash setup-server.sh \
   -grafana-url=http://localhost:3000 \
-  -grafana-key=glsa_xxxxx
+  -grafana-key=glsa_xxxxx \
+  -api-public-url=http://YOUR_PUBLIC_IP:9099
 ```
 
-This sets up:
-- Prometheus `--web.enable-remote-write-receiver`
-- Port Monitor API on `:9099`
-- All Grafana dashboards deployed
+This installs:
 
-### Step 2 — Each Node Server
+- Prometheus `remote_write` receiver
+- Central Monitoring API with **install token** + **API key** (`/etc/port-monitor/config.json`, mode `600`)
+- All 8 Grafana dashboards in folder **Monitoring**
+- Grafana HTML panels enabled (for embedded server editor)
+
+**Save the install token** printed at the end — required for every new node.
+
+**Security:** Restrict port **9099** to your VPC/office (security group / `ufw`). Do not expose it to the public internet without a VPN.
+
+---
+
+## Install a node
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rohioffl/Alloy/main/install-alloy.sh | \
-  sudo bash -s -- -remote-write=http://<central-ip>:9090/api/v1/write
+curl -fsSL .../install-alloy.sh | sudo bash -s -- \
+  -remote-write=http://CENTRAL_IP:9090/api/v1/write \
+  -install-token=YOUR_INSTALL_TOKEN
 ```
-
-The node appears in Grafana within 30 seconds.
-
----
-
-## Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `setup-server.sh` | Run once on central server — sets up API, dashboards, Prometheus |
-| `install-alloy.sh` | Run on each node — installs Alloy and connects to central |
-| `port-monitor-api.py` | Port Monitor API (auto-installed by setup-server.sh) |
-
----
-
-## Install Flags
-
-### `setup-server.sh`
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-grafana-url=URL` | `http://localhost:3000` | Grafana base URL |
-| `-grafana-key=TOKEN` | — | Service account token (required for dashboards) |
+| `-remote-write=URL` | required | Prometheus endpoint |
+| `-install-token=TOKEN` | — | From `setup-server.sh` (required in production) |
 
-### `install-alloy.sh`
+Optional install flags (`-client`, `-account`, `-name`) exist but **you should set these in Grafana** instead (see below).
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-remote-write=URL` | `http://localhost:9090/api/v1/write` | Prometheus remote_write endpoint |
-| `-loki=URL` | `http://localhost:3000/loki/api/v1/push` | Loki push endpoint |
-| `-processes=NAMES` | `auto` | Comma-separated process names or `auto` |
-| `-uninstall` | — | Remove Alloy completely |
+New nodes appear as **Unassigned / default** within ~30 seconds. Then name them in the dashboard.
 
 ---
 
-## Port Management
+## Set client, account & display name (in Grafana)
 
-Ports are managed from the **Grafana Ports dashboard** — no SSH needed.
+**Recommended:** open **All Servers** — full list with inline editor.
 
-Each node's Alloy polls `http://<central>:9099/targets/<hostname>` every 30 seconds.  
-When you add/remove a port in the dashboard, the node picks it up within 30 seconds.
+1. Open **All Servers** (`/d/alloy-servers/all-servers`)
+2. Click any row (including **Unassigned**)
+3. Edit **Display name**, **Client**, **Account**, **IP** → **Save**
+4. Or use **Server Drill-Down (Summary)** per host:
 
-### From Grafana Dashboard
-1. Open **Server Drill-Down · Ports**
-2. Expand **⚙️ Manage Monitored Ports**
-3. Select the host, enter Name + Port, click **+ Add**
+1. Open **Server Drill-Down (Summary)**
+2. Select **Host** in the top toolbar
+3. Scroll to **Client · Account · Display Name — edit here**
+4. Fill in **Display name**, **Client**, **Account** → click **Save to monitoring**
+5. Press **F5** to refresh — Client/Account dropdowns update
 
-### From CLI
+No SSH or install flags needed for naming.
+
+---
+
+## Manage ports
+
+### Grafana
+
+1. **Server Drill-Down · Ports** — select host, expand **⚙️ Manage Monitored Ports**
+
+### API
+
 ```bash
-# Add a port for a specific host
-curl -X POST http://<central>:9099/ports/<hostname> \
+API=http://CENTRAL_IP:9099
+KEY=your_api_key_from_setup
+
+# Rename / set client & account
+curl -X PUT "$API/api/v1/servers/HOSTNAME" \
   -H "Content-Type: application/json" \
-  -d '{"name":"redis","port":"6379"}'
+  -H "X-Monitor-Key: $KEY" \
+  -d '{"name":"My Server","client":"acme","account":"production"}'
 
-# Remove a port
-curl -X DELETE http://<central>:9099/ports/<hostname>/redis
-
-# List ports for a host
-curl http://<central>:9099/ports/<hostname>
-
-# List all hosts
-curl http://<central>:9099/hosts
+# Add port (probes server registered IP)
+curl -X POST "$API/api/v1/servers/HOSTNAME/ports" \
+  -H "Content-Type: application/json" \
+  -H "X-Monitor-Key: $KEY" \
+  -d '{"name":"redis","port":"6379","module":"tcp_connect"}'
 ```
 
----
-
-## Dashboards
-
-| Dashboard | Description |
-|-----------|-------------|
-| **Summary** | Availability, CPU/Mem/Disk, Ports, System Info, Top Processes, Server Details |
-| **CPU** | Usage %, per-core, load average, context switches |
-| **Memory** | RAM, swap, page faults, breakdown |
-| **Disks** | Filesystem usage, IOPS, latency, inode |
-| **Network** | Traffic, packets, errors, TCP connections |
-| **Ports** | Status table, timeline, latency + Add/Remove UI |
-| **Processes** | Top CPU/memory, threads, FDs per process |
-
-All dashboards use a `$host` variable — select any monitored server.
+Docs: `GET /api/v1/docs`
 
 ---
 
-## File Structure
+## File layout
 
 ```
 monitoring/
-├── setup-server.sh        # Central server setup (run once)
-├── install-alloy.sh       # Node agent installer
-├── port-monitor-api.py    # Port Monitor API
-├── README.md
-└── dashboards/
-    ├── summary.json
-    ├── cpu.json
-    ├── memory.json
-    ├── disk.json
-    ├── network.json
-    ├── ports.json
-    └── processes.json
-```
-
----
-
-## Uninstall Node
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/rohioffl/Alloy/main/install-alloy.sh | \
-  sudo bash -s -- -uninstall
+├── setup-server.sh        # Central server (run once)
+├── install-alloy.sh       # Node agent
+├── port-monitor-api.py    # Central API
+└── dashboards/          # 7 Grafana dashboards
 ```
 
 ---
@@ -166,29 +128,13 @@ curl -fsSL https://raw.githubusercontent.com/rohioffl/Alloy/main/install-alloy.s
 ## Troubleshooting
 
 ```bash
-# Node — check Alloy
-systemctl status alloy
-journalctl -u alloy -f
-
-# Central — check Port API
-systemctl status port-monitor-api
-curl http://localhost:9099/hosts
-
-# Verify node metrics in Prometheus
-curl -s 'http://localhost:9090/api/v1/query?query=up{job="integrations/unix"}'
-
-# Verify port probes
-curl -s 'http://localhost:9090/api/v1/query?query=probe_success'
+systemctl status port-monitor-api alloy prometheus grafana-server
+journalctl -u port-monitor-api -f
+curl http://localhost:9099/api/v1/health
+curl http://localhost:9099/api/v1/servers
 ```
 
----
-
-## What Alloy Replaces
-
-| Before | After |
-|--------|-------|
-| node_exporter | `prometheus.exporter.unix` |
-| process-exporter | `prometheus.exporter.process` |
-| blackbox_exporter | `prometheus.exporter.blackbox` |
-| promtail | `loki.source.file` |
-| manual port config | Port Monitor API + Grafana UI |
+```bash
+# Metrics flowing?
+curl -s 'http://localhost:9090/api/v1/query?query=up{job="integrations/unix"}'
+```

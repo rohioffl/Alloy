@@ -307,7 +307,7 @@
             },
             "id": 51,
             "options": {
-              "content": "<iframe src=\"http://3.7.218.171:9099/?tab=ports\" style=\"width:100%;height:100%;border:none;border-radius:8px;\"></iframe>",
+              "content": "<iframe src=\"__MONITOR_API_PUBLIC_URL__/ports-only?host=${host}\" style=\"width:100%;height:100%;border:none;border-radius:8px;\"></iframe>",
               "mode": "html"
             },
             "title": "",
@@ -329,19 +329,46 @@
     "templating": {
       "list": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
+          "allValue": ".*",
+          "current": {"text": "All", "value": "$__all"},
+          "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "__INFINITY_DS_UID__"},
+          "includeAll": true,
+          "label": "Client",
+          "name": "client",
+          "query": {
+            "infinityQuery": {"refId": "variable", "source": "url", "type": "json", "url": "http://localhost:9099/api/v1/variables/clients"},
+            "queryType": "infinity",
+            "type": "infinity"
           },
+          "refresh": 1,
+          "type": "query"
+        },
+        {
+          "allValue": ".*",
+          "current": {"text": "All", "value": "$__all"},
+          "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "__INFINITY_DS_UID__"},
+          "includeAll": true,
+          "label": "Account",
+          "name": "account",
+          "query": {
+            "infinityQuery": {"refId": "variable", "source": "url", "type": "json", "url": "http://localhost:9099/api/v1/variables/accounts?client=${client}"},
+            "queryType": "infinity",
+            "type": "infinity"
+          },
+          "refresh": 1,
+          "type": "query"
+        },
+        {
+          "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "__INFINITY_DS_UID__"},
           "includeAll": false,
           "label": "Host",
           "name": "host",
           "query": {
-            "query": "label_values(node_uname_info{job=\"integrations/unix\"}, host)",
-            "refId": "StandardVariableQuery"
+            "infinityQuery": {"refId": "variable", "source": "url", "type": "json", "url": "http://localhost:9099/api/v1/variables/hosts?client=${client}&account=${account}"},
+            "queryType": "infinity",
+            "type": "infinity"
           },
-          "refresh": 2,
-          "sort": 1,
+          "refresh": 1,
           "type": "query"
         },
         {

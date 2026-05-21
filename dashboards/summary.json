@@ -454,74 +454,6 @@
         },
         "fieldConfig": {
           "defaults": {
-            "decimals": 2,
-            "max": 100,
-            "min": 0,
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "red",
-                  "value": 0
-                },
-                {
-                  "color": "orange",
-                  "value": 99
-                },
-                {
-                  "color": "green",
-                  "value": 99.9
-                }
-              ]
-            },
-            "unit": "percent"
-          }
-        },
-        "gridPos": {
-          "h": 4,
-          "w": 2,
-          "x": 22,
-          "y": 2
-        },
-        "id": 7,
-        "options": {
-          "colorMode": "value",
-          "graphMode": "none",
-          "justifyMode": "auto",
-          "orientation": "auto",
-          "percentChangeColorMode": "standard",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
-          },
-          "showPercentChange": false,
-          "textMode": "value",
-          "wideLayout": true
-        },
-        "pluginVersion": "13.0.1+security-01",
-        "targets": [
-          {
-            "datasource": {
-              "type": "prometheus",
-              "uid": "PBFA97CFB590B2093"
-            },
-            "expr": "max(avg_over_time(up{job=\"integrations/unix\",host=\"$host\"}[$__range])) * 100",
-            "refId": "A"
-          }
-        ],
-        "title": "SLA",
-        "type": "stat"
-      },
-      {
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-        },
-        "fieldConfig": {
-          "defaults": {
             "color": {
               "fixedColor": "text",
               "mode": "fixed"
@@ -1096,7 +1028,7 @@
         "type": "table"
       },
       {
-        "collapsed": true,
+        "collapsed": false,
         "gridPos": {
           "h": 1,
           "w": 24,
@@ -1107,14 +1039,14 @@
         "panels": [
           {
             "gridPos": {
-              "h": 12,
+              "h": 10,
               "w": 24,
               "x": 0,
               "y": 24
             },
             "id": 91,
             "options": {
-              "content": "<iframe src=\"http://3.7.218.171:9099/\" style=\"width:100%;height:100%;border:none;border-radius:8px;\"></iframe>",
+              "content": "<iframe src=\"__MONITOR_API_PUBLIC_URL__/nodes-only?host=${host}\" style=\"width:100%;height:220px;border:none;border-radius:8px;\"></iframe>",
               "mode": "html"
             },
             "title": "",
@@ -1122,7 +1054,7 @@
             "type": "text"
           }
         ],
-        "title": "\u2699\ufe0f Manage Nodes & Ports",
+        "title": "Client \u00b7 Account \u00b7 Display Name \u2014 edit here",
         "type": "row"
       }
     ],
@@ -1143,35 +1075,75 @@
             "value": "$__all"
           },
           "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "__INFINITY_DS_UID__"
           },
+          "definition": "url|http://localhost:9099/api/v1/variables/clients|json|$.__text|$.__value",
+          "includeAll": true,
+          "label": "Client",
+          "name": "client",
+          "query": {
+            "infinityQuery": {
+              "refId": "variable",
+              "source": "url",
+              "type": "json",
+              "url": "http://localhost:9099/api/v1/variables/clients"
+            },
+            "queryType": "infinity",
+            "type": "infinity"
+          },
+          "refresh": 1,
+          "sort": 0,
+          "type": "query"
+        },
+        {
+          "allValue": ".*",
+          "current": {
+            "text": "All",
+            "value": "$__all"
+          },
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "__INFINITY_DS_UID__"
+          },
+          "definition": "url|http://localhost:9099/api/v1/variables/accounts?client=${client}|json|$.__text|$.__value",
           "includeAll": true,
           "label": "Account",
-          "multi": false,
           "name": "account",
           "query": {
-            "query": "label_values(node_uname_info{job=\"integrations/unix\"}, account)",
-            "refId": "StandardVariableQuery"
+            "infinityQuery": {
+              "refId": "variable",
+              "source": "url",
+              "type": "json",
+              "url": "http://localhost:9099/api/v1/variables/accounts?client=${client}"
+            },
+            "queryType": "infinity",
+            "type": "infinity"
           },
-          "refresh": 2,
-          "sort": 1,
+          "refresh": 1,
+          "sort": 0,
           "type": "query"
         },
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "__INFINITY_DS_UID__"
           },
           "includeAll": false,
           "label": "Host",
           "name": "host",
           "query": {
-            "query": "label_values(node_uname_info{job=\"integrations/unix\",account=~\"$account\"}, host)",
-            "refId": "StandardVariableQuery"
+            "infinityQuery": {
+              "refId": "variable",
+              "source": "url",
+              "type": "json",
+              "url": "http://localhost:9099/api/v1/variables/hosts?client=${client}&account=${account}"
+            },
+            "queryType": "infinity",
+            "type": "infinity"
           },
-          "refresh": 2,
-          "sort": 1,
+          "refresh": 1,
+          "sort": 0,
           "type": "query"
         }
       ]
