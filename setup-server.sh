@@ -69,16 +69,44 @@ else
   warn "Prometheus not running — skipping remote_write setup"
 fi
 
-# ---- Step 2: Central Monitoring API ------------------------------------------
-log "Step 2: Installing Central Monitoring API..."
+# ---- Step 2: Central Monitoring API (FastAPI + uvicorn) ----------------------
+log "Step 2: Installing Central Monitoring API (FastAPI)..."
 
-API_SRC="${SCRIPT_DIR}/port-monitor-api.py"
-API_DEST="/opt/port-monitor-api.py"
-[ -f "$API_SRC" ] && cp "$API_SRC" "$API_DEST" || \
-  curl -fsSL "https://raw.githubusercontent.com/rohioffl/Alloy/main/port-monitor-api.py" -o "$API_DEST"
+API_SRC_DIR="${SCRIPT_DIR}/api"
+API_DEST_DIR="/opt/port-monitor-api"
+
+mkdir -p "$API_DEST_DIR"
+if [ -d "$API_SRC_DIR/app" ]; then
+  cp -r "$API_SRC_DIR/app" "$API_DEST_DIR/"
+  cp "$API_SRC_DIR/requirements.txt" "$API_DEST_DIR/" 2>/dev/null || true
+  cp "$API_SRC_DIR/run.py" "$API_DEST_DIR/" 2>/dev/null || true
+else
+  # Fallback: pull the package from the repo (raw can't list dirs, so use a tarball)
+  warn "Local api/ folder not found — fetching from GitHub"
+  TMP_TGZ=$(mktemp)
+  curl -fsSL "https://github.com/rohioffl/Alloy/archive/refs/heads/main.tar.gz" -o "$TMP_TGZ"
+  tar -xzf "$TMP_TGZ" -C /tmp
+  cp -r /tmp/Alloy-main/api/app "$API_DEST_DIR/"
+  cp /tmp/Alloy-main/api/requirements.txt "$API_DEST_DIR/" 2>/dev/null || true
+  cp /tmp/Alloy-main/api/run.py "$API_DEST_DIR/" 2>/dev/null || true
+  rm -rf "$TMP_TGZ" /tmp/Alloy-main
+fi
 
 mkdir -p /var/lib/port-monitor/ports /etc/port-monitor
 chmod 700 /etc/port-monitor
+
+# Python venv with FastAPI + uvicorn
+if ! python3 -c "import venv" 2>/dev/null || ! python3 -m venv --help >/dev/null 2>&1; then
+  PYVER=$(python3 -c "import sys;print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+  apt-get update -qq 2>/dev/null || true
+  apt-get install -y "python${PYVER}-venv" python3-pip >/dev/null 2>&1 || \
+    apt-get install -y python3-venv python3-pip >/dev/null 2>&1 || \
+    warn "Could not install python venv package — install python3-venv manually"
+fi
+python3 -m venv "$API_DEST_DIR/.venv"
+"$API_DEST_DIR/.venv/bin/pip" install --quiet --upgrade pip
+"$API_DEST_DIR/.venv/bin/pip" install --quiet -r "$API_DEST_DIR/requirements.txt"
+ok "FastAPI dependencies installed in $API_DEST_DIR/.venv"
 
 SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
 API_PUBLIC_URL="${API_PUBLIC_URL:-http://${SERVER_IP}:9099}"
@@ -105,18 +133,19 @@ chmod 600 /etc/port-monitor/config.json
 
 cat > /etc/systemd/system/port-monitor-api.service << EOF
 [Unit]
-Description=Central Monitoring API
+Description=Central Monitoring API (FastAPI)
 After=network-online.target prometheus.service
 Wants=network-online.target
 
 [Service]
 Type=simple
+WorkingDirectory=${API_DEST_DIR}
 Environment=MONITOR_CONFIG=/etc/port-monitor/config.json
 Environment=MONITOR_PUBLIC_URL=${API_PUBLIC_URL}
 Environment=MONITOR_GRAFANA_URL=${GRAFANA_URL%/}
 Environment=MONITOR_INSTALL_TOKEN=${INSTALL_TOKEN}
 Environment=MONITOR_API_KEY=${API_KEY}
-ExecStart=/usr/bin/python3 /opt/port-monitor-api.py
+ExecStart=${API_DEST_DIR}/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 9099
 Restart=on-failure
 RestartSec=5s
 LimitNOFILE=65535
@@ -129,7 +158,7 @@ systemctl daemon-reload
 systemctl enable --now port-monitor-api
 sleep 2
 systemctl is-active --quiet port-monitor-api || die "API failed: journalctl -u port-monitor-api -n 20"
-ok "Central Monitoring API on :9099"
+ok "Central Monitoring API (FastAPI) on :9099"
 
 # ---- Step 2b: Alloy on central host (metrics for this server) ----------------
 log "Step 2b: Installing Alloy on central host..."

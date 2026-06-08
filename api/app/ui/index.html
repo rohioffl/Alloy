@@ -1,0 +1,240 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Monitoring Manager</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;background:#0b0c0e;color:#e0e0e0;padding:20px;max-width:1100px;margin:0 auto}
+h1{font-size:20px;margin-bottom:4px;color:#fff}
+.sub{font-size:12px;color:#666;margin-bottom:18px}
+.tabs{display:flex;gap:20px;margin-bottom:16px;border-bottom:1px solid #333;padding-bottom:8px}
+.tab{color:#888;cursor:pointer;padding:4px 0;font-size:14px}.tab.active{color:#fff;border-bottom:2px solid #f59e0b;font-weight:600}
+.section{display:none}.section.active{display:block}
+.card{background:#111318;border:1px solid #222;border-radius:8px;padding:14px;margin-bottom:14px}
+.card h2{font-size:13px;color:#aaa;margin-bottom:10px;font-weight:500}
+input,select{padding:8px 10px;border-radius:6px;border:1px solid #444;background:#1a1a2e;color:#fff;font-size:13px}
+input:focus,select:focus{outline:none;border-color:#f59e0b}
+label{font-size:11px;color:#888;display:block;margin-bottom:4px}
+.row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:10px}
+.btn{padding:8px 16px;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px}
+.btn-primary{background:#22c55e;color:#fff}.btn-danger{background:#ef4444;color:#fff}.btn-secondary{background:#333;color:#ccc}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #1a1a2e}
+th{color:#666;font-weight:500}
+.badge{font-size:10px;background:#333;color:#aaa;padding:2px 8px;border-radius:4px}
+#status,#p-status{font-size:12px;margin-left:10px}
+.indent{margin-left:16px;margin-top:8px}
+.click-row{cursor:pointer}.click-row:hover{background:#1a1a2e}
+</style></head><body>
+<h1>Central Monitoring API</h1>
+<p class="sub">Name servers, organize by client/account, and manage port probes — no SSH required.</p>
+<div class="tabs">
+<span class="tab active" data-tab="servers">Servers</span>
+<span class="tab" data-tab="ports">Ports</span>
+<span class="tab" data-tab="api">API Docs</span>
+<span class="tab" data-tab="client-orgs">Client Orgs</span>
+</div>
+
+<div id="servers" class="section active">
+<div class="card"><h2>Registered servers</h2><p class="sub" style="margin-bottom:10px">Install Alloy on a node to register it automatically.</p><div id="tree"></div></div>
+<div class="card">
+<h2>Edit selected server</h2>
+<div class="row">
+<div><label>Hostname</label><select id="edit-host" style="width:100%"></select></div>
+<div><label>Display name</label><input id="edit-name"/></div>
+<div><label>IP (from install)</label><input id="edit-ip" readonly title="Set when Alloy registers; re-run install-alloy.sh to refresh"/></div>
+<div><label>Client</label><select id="edit-client-sel" style="width:100%" onchange="onCombo('edit-client-sel','edit-client-new',refreshEditAccounts)"></select><input id="edit-client-new" style="display:none;margin-top:6px;width:100%" placeholder="New client name"/></div>
+<div><label>Account</label><select id="edit-account-sel" style="width:100%" onchange="onCombo('edit-account-sel','edit-account-new')"></select><input id="edit-account-new" style="display:none;margin-top:6px;width:100%" placeholder="New account name"/></div>
+</div>
+<button class="btn btn-primary" onclick="saveServer()">Save</button>
+<button class="btn btn-danger" onclick="deleteServer()">Delete</button>
+<span id="status"></span>
+</div>
+</div>
+
+<div id="ports" class="section">
+<div class="card">
+<h2>Add port probe</h2>
+<div class="row">
+<div><label>Server</label><select id="p-host" onchange="loadPorts()" style="width:100%"></select></div>
+<div><label>Name *</label><input id="p-name" placeholder="redis"/></div>
+<div><label>Port *</label><input id="p-port" type="number" placeholder="6379"/></div>
+<div><label>Check type</label><select id="p-module"><option value="tcp_connect">TCP</option><option value="http_2xx">HTTP</option></select></div>
+</div>
+<p style="font-size:11px;color:#666;margin-bottom:10px">Probes use the server's registered IP. Alloy on the node picks up changes within ~30s.</p>
+<button class="btn btn-primary" onclick="addPort()">+ Add port</button>
+<span id="p-status"></span>
+</div>
+<div class="card"><h2>Monitored ports</h2>
+<table><thead><tr><th>Name</th><th>Address</th><th>Type</th><th></th></tr></thead><tbody id="port-list"></tbody></table>
+</div>
+</div>
+
+
+<div id="client-orgs" class="section">
+<div class="card">
+<h2>Client Organizations</h2>
+<p class="sub" style="margin-bottom:12px">Each client gets a separate Grafana org with read-only access to their servers only. Assign servers to a client using the Servers tab first.</p>
+<div id="orgs-list" style="margin-bottom:16px"></div>
+<div class="row" style="align-items:flex-end">
+<div><label>Client name (must match exactly from Servers tab)</label><input id="new-org-client" placeholder="e.g. Acme Corp" style="width:100%"/></div>
+<div><label>Viewer password</label><input id="new-org-password" type="password" placeholder="ChangeMe@2026" style="width:100%"/></div>
+<div style="padding-top:18px"><button class="btn btn-primary" onclick="createOrg()">Create Client Org</button></div>
+</div>
+<span id="org-status" style="font-size:12px;margin-top:8px;display:block"></span>
+</div>
+</div>
+<div id="api" class="section">
+<div class="card"><h2>REST API</h2><pre id="api-docs" style="font-size:12px;color:#ccc;white-space:pre-wrap;line-height:1.5"></pre></div>
+</div>
+
+<script>
+__SCRIPT__
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===t));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById(t.dataset.tab).classList.add('active');
+  if(t.dataset.tab==='ports')loadHostSelect();
+  if(t.dataset.tab==='api')loadDocs();
+  if(t.dataset.tab==='client-orgs')loadOrgs();
+});
+const qs=new URLSearchParams(location.search);
+if(qs.get('tab')==='ports'){document.querySelector('[data-tab=ports]').click();}
+if(qs.get('host')){setTimeout(()=>{const s=document.getElementById('p-host');if(s){s.value=qs.get('host');loadPorts();}},300);}
+
+async function j(url,opt){const r=await fetch(url,opt);return r.json();}
+function setSt(id,msg,ok){const e=document.getElementById(id);e.textContent=msg;e.style.color=ok?'#22c55e':'#ef4444';}
+
+async function loadTree(){
+  const d=await j(API+'/api/v1/servers');
+  const nodes=d.servers||[];
+  const tree={};
+  nodes.forEach(n=>{
+    const c=n.client||'Unassigned',a=n.account||'default';
+    if(!tree[c])tree[c]={};if(!tree[c][a])tree[c][a]=[];
+    tree[c][a].push(n);
+  });
+  let html='';
+  Object.keys(tree).sort().forEach(client=>{
+    const accounts=tree[client];
+    const cnt=Object.values(accounts).reduce((s,a)=>s+a.length,0);
+    html+=`<div class="card"><strong>${client}</strong> <span class="badge">${cnt} servers</span>`;
+    Object.keys(accounts).sort().forEach(account=>{
+      html+=`<div class="indent"><h2 style="font-size:12px;color:#888;margin:8px 0">${account}</h2><table><thead><tr><th>Hostname</th><th>Name</th><th>IP</th><th>Ports</th></tr></thead><tbody>`;
+      accounts[account].forEach(s=>{
+        html+=`<tr class="click-row" onclick="selectServer('${s.hostname}')"><td>${s.hostname}</td><td>${s.name||'-'}</td><td>${s.ip||'-'}</td><td>${s.port_count||0}</td></tr>`;
+      });
+      html+='</tbody></table></div>';
+    });
+    html+='</div>';
+  });
+  document.getElementById('tree').innerHTML=html||'<p style="color:#666">No servers yet. Install Alloy on a node with install-alloy.sh.</p>';
+  const sel=document.getElementById('edit-host');
+  const prev=sel.value;
+  sel.innerHTML='<option value="">— select —</option>';
+  nodes.forEach(n=>{const o=document.createElement('option');o.value=n.hostname;o.textContent=n.hostname+(n.name?' ('+n.name+')':'');sel.appendChild(o);});
+  if(prev)sel.value=prev;
+}
+
+async function refreshEditAccounts(){
+  const c=comboVal('edit-client-sel','edit-client-new');
+  const acc=await fetchAccounts(c);
+  fillCombo('edit-account-sel','edit-account-new',acc,document.getElementById('edit-account-sel').dataset.current||'');
+}
+
+function selectServer(h){
+  document.getElementById('edit-host').value=h;
+  j(API+'/api/v1/servers/'+encodeURIComponent(h)).then(async n=>{
+    document.getElementById('edit-name').value=n.name||'';
+    document.getElementById('edit-ip').value=n.ip||'';
+    const clients=await fetchClients();
+    fillCombo('edit-client-sel','edit-client-new',clients,n.client||'');
+    const acc=await fetchAccounts(n.client||'');
+    document.getElementById('edit-account-sel').dataset.current=n.account||'';
+    fillCombo('edit-account-sel','edit-account-new',acc,n.account||'');
+  });
+}
+
+async function saveServer(){
+  const h=document.getElementById('edit-host').value;
+  if(!h){setSt('status','Select a server',false);return;}
+  const body={name:document.getElementById('edit-name').value.trim(),client:comboVal('edit-client-sel','edit-client-new'),account:comboVal('edit-account-sel','edit-account-new')};
+  const d=await j(API+'/api/v1/servers/'+encodeURIComponent(h),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  setSt('status',d.message||d.error,!d.error);loadTree();
+}
+
+async function deleteServer(){
+  const h=document.getElementById('edit-host').value;
+  if(!h||!confirm('Delete '+h+' and all its ports?'))return;
+  await j(API+'/api/v1/servers/'+encodeURIComponent(h),{method:'DELETE'});
+  setSt('status','Removed',true);loadTree();
+}
+
+async function loadHostSelect(){
+  const d=await j(API+'/api/v1/servers');
+  const s=document.getElementById('p-host'),p=s.value||qs.get('host')||'';
+  s.innerHTML='';
+  (d.servers||[]).forEach(n=>{const o=document.createElement('option');o.value=n.hostname;o.textContent=n.hostname+(n.name?' ('+n.name+')':'');s.appendChild(o);});
+  if(p)s.value=p;loadPorts();
+}
+
+async function loadPorts(){
+  const h=document.getElementById('p-host').value;if(!h)return;
+  const d=await j(API+'/api/v1/servers/'+encodeURIComponent(h)+'/ports');
+  const t=document.getElementById('port-list');t.innerHTML='';
+  (d.ports||[]).forEach(p=>{
+    t.innerHTML+=`<tr><td>${p.name}</td><td>${p.address}</td><td>${p.module}</td><td><button class="btn btn-danger" style="padding:4px 10px;font-size:11px" onclick="delPort('${p.name}')">Remove</button></td></tr>`;
+  });
+}
+
+async function addPort(){
+  const h=document.getElementById('p-host').value,n=document.getElementById('p-name').value.trim(),p=document.getElementById('p-port').value.trim(),m=document.getElementById('p-module').value;
+  if(!h||!n||!p){setSt('p-status','Server, name, and port required',false);return;}
+  const d=await j(API+'/api/v1/servers/'+encodeURIComponent(h)+'/ports',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n,port:p,module:m})});
+  setSt('p-status',d.message||d.error,!d.error);
+  if(!d.error){document.getElementById('p-name').value='';document.getElementById('p-port').value='';loadPorts();}
+}
+
+async function delPort(n){
+  const h=document.getElementById('p-host').value;
+  await j(API+'/api/v1/servers/'+encodeURIComponent(h)+'/ports/'+encodeURIComponent(n),{method:'DELETE'});
+  loadPorts();
+}
+
+async function loadDocs(){
+  const d=await j(API+'/api/v1/docs');
+  document.getElementById('api-docs').textContent=JSON.stringify(d,null,2);
+}
+
+async function loadOrgs(){
+  const el=document.getElementById('orgs-list');
+  const d=await j(API+'/api/v1/grafana-orgs/status').catch(()=>({orgs:[]}));
+  const orgs=d.orgs||[];
+  if(!orgs.length){el.innerHTML='<p style="color:#666">No client orgs yet.</p>';return;}
+  let html='<table><thead><tr><th>Client</th><th>Servers</th><th>Login</th><th>Dashboard</th><th></th></tr></thead><tbody>';
+  orgs.forEach(o=>{
+    const dash=o.dashboard_url?'<a href="'+o.dashboard_url+'" target="_blank" style="color:#3b82f6">Open</a>':'-';
+    html+=`<tr><td>${o.client}</td><td>${o.server_count}</td><td>${o.login||'-'}</td><td>${dash}</td><td><button class="btn btn-danger" style="padding:4px 10px;font-size:11px" onclick="deleteOrg('${o.client}')">Delete</button></td></tr>`;
+  });
+  html+='</tbody></table>';
+  el.innerHTML=html;
+}
+
+async function createOrg(){
+  const client=document.getElementById('new-org-client').value.trim();
+  const password=document.getElementById('new-org-password').value||'ChangeMe@2026';
+  if(!client){setSt('org-status','Client name required',false);return;}
+  setSt('org-status','Creating org...',true);
+  const d=await j(API+'/api/v1/grafana-orgs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client,password})}).catch(e=>({error:String(e)}));
+  setSt('org-status',d.error?('Error: '+d.error):('Created! Login: '+d.login+' / '+password),!d.error);
+  if(!d.error){document.getElementById('new-org-client').value='';document.getElementById('new-org-password').value='';loadOrgs();}
+}
+
+async function deleteOrg(client){
+  if(!confirm('Delete the Grafana portal for "'+client+'"? Removes their org, dashboard, and viewer login. Servers are NOT affected.'))return;
+  await j(API+'/api/v1/grafana-orgs/'+encodeURIComponent(client),{method:'DELETE'}).catch(()=>{});
+  loadOrgs();
+}
+
+document.getElementById('edit-host').onchange=function(){if(this.value)selectServer(this.value);};
+__COMBO_JS__
+loadTree();
+</script>
+</body></html>

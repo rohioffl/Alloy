@@ -1,0 +1,58 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Manage Ports</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Inter,sans-serif;background:#0b0c0e;color:#e0e0e0;padding:16px}
+input,select{padding:7px 10px;border-radius:4px;border:1px solid #444;background:#1a1a2e;color:#fff;font-size:12px}
+.btn{padding:7px 12px;border:none;border-radius:4px;font-weight:600;cursor:pointer;font-size:12px;background:#22c55e;color:#fff}
+.btn-del{background:#ef4444;color:#fff;padding:3px 8px;font-size:11px}
+table{width:100%;border-collapse:collapse;margin-top:6px}th,td{text-align:left;padding:5px 8px;border-bottom:1px solid #1a1a2e;font-size:12px}
+th{color:#888}#p-status{font-size:11px;margin-left:8px}</style></head><body>
+<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+<label style="color:#888;font-size:12px">Server:</label>
+<select id="p-host" onchange="loadPorts()" style="min-width:200px"></select>
+<span id="p-host-label" style="display:none;font-weight:600;color:#fff;font-size:14px"></span>
+</div>
+<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">
+<input id="p-name" placeholder="Name" style="width:110px"/>
+<input id="p-port" placeholder="Port" style="width:80px" type="number"/>
+<select id="p-module"><option value="tcp_connect">TCP</option><option value="http_2xx">HTTP</option></select>
+<button class="btn" onclick="addPort()">+ Add</button><span id="p-status"></span>
+</div>
+<table><thead><tr><th>Name</th><th>Address</th><th>Type</th><th></th></tr></thead><tbody id="port-list"></tbody></table>
+<script>
+__SCRIPT__
+const qs=new URLSearchParams(location.search);
+async function loadHosts(){
+  const fixed=qs.get('host');
+  const sel=document.getElementById('p-host'),lbl=document.getElementById('p-host-label');
+  if(fixed){
+    // Locked to the host selected in Grafana: hide dropdown, show label
+    sel.style.display='none';
+    sel.innerHTML='<option value="'+fixed+'">'+fixed+'</option>';
+    sel.value=fixed;
+    let disp=fixed;
+    try{const d=await fetch(API+'/api/v1/servers').then(r=>r.json());const n=(d.servers||[]).find(x=>x.hostname===fixed);if(n&&n.name)disp=n.name+' ('+fixed+')';}catch(e){}
+    lbl.textContent=disp;lbl.style.display='inline';
+    loadPorts();return;
+  }
+  const d=await fetch(API+'/api/v1/servers').then(r=>r.json());
+  sel.innerHTML='';(d.servers||[]).forEach(n=>{const o=document.createElement('option');o.value=n.hostname;o.textContent=n.hostname+(n.name?' ('+n.name+')':'');sel.appendChild(o);});
+  if(sel.value)loadPorts();
+}
+async function loadPorts(){
+  const h=document.getElementById('p-host').value;if(!h)return;
+  const d=await fetch(API+'/api/v1/servers/'+encodeURIComponent(h)+'/ports').then(r=>r.json());
+  const t=document.getElementById('port-list');t.innerHTML='';
+  (d.ports||[]).forEach(p=>{t.innerHTML+=`<tr><td>${p.name}</td><td>${p.address}</td><td>${p.module}</td><td><button class='btn-del' onclick="delPort('${p.name}')">Remove</button></td></tr>`;});
+}
+async function addPort(){
+  const h=document.getElementById('p-host').value,n=document.getElementById('p-name').value.trim(),p=document.getElementById('p-port').value.trim(),m=document.getElementById('p-module').value,st=document.getElementById('p-status');
+  if(!h||!n||!p){st.textContent='Fill all fields';st.style.color='#f59e0b';return;}
+  const d=await fetch(API+'/api/v1/servers/'+encodeURIComponent(h)+'/ports',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n,port:p,module:m})}).then(r=>r.json());
+  st.textContent=d.message||d.error;st.style.color=d.error?'#ef4444':'#22c55e';if(!d.error){loadPorts();document.getElementById('p-name').value='';document.getElementById('p-port').value='';}
+}
+async function delPort(n){
+  const h=document.getElementById('p-host').value;
+  await fetch(API+'/api/v1/servers/'+encodeURIComponent(h)+'/ports/'+encodeURIComponent(n),{method:'DELETE'});
+  loadPorts();
+}
+loadHosts();
+</script></body></html>

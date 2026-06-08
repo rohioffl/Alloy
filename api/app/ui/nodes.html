@@ -1,0 +1,70 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Server Settings</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;background:#0b0c0e;color:#e0e0e0;padding:18px}
+h3{font-size:14px;font-weight:600;color:#fff;margin-bottom:4px}
+p{font-size:11px;color:#666;margin-bottom:14px;line-height:1.4}
+label{font-size:11px;color:#888;margin-bottom:4px;display:block}
+input,select{padding:9px 11px;border-radius:6px;border:1px solid #444;background:#1a1a2e;color:#fff;font-size:13px;width:100%}
+input:read-only{opacity:.7}
+.row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:14px}
+.btn{padding:9px 18px;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;background:#22c55e;color:#fff}
+.btn:hover{background:#16a34a}
+.hint{font-size:11px;color:#f59e0b;margin-left:10px}
+#status{font-size:12px;margin-left:10px}
+</style></head><body>
+<h3>Server settings</h3>
+<p>Set display name, client, and account here — no install flags needed. Select a host in the Grafana toolbar above first.</p>
+<div class="row">
+<div><label>Hostname</label><input id="hostname" readonly/></div>
+<div><label>Display name</label><input id="name" placeholder="e.g. Production Web 01"/></div>
+<div><label>Client</label><select id="client-sel" style="width:100%" onchange="onCombo('client-sel','client-new',refreshNodeAccounts)"></select><input id="client-new" style="display:none;margin-top:6px;width:100%" placeholder="New client name"/></div>
+<div><label>Account</label><select id="account-sel" style="width:100%" onchange="onCombo('account-sel','account-new')"></select><input id="account-new" style="display:none;margin-top:6px;width:100%" placeholder="New account name"/></div>
+</div>
+<div>
+<button class="btn" onclick="save()">Save to monitoring</button>
+<span id="status"></span>
+<span class="hint" id="hint"></span>
+</div>
+<script>
+__SCRIPT__
+const HOST=HOST_PARAM||new URLSearchParams(location.search).get('host')||'';
+async function refreshNodeAccounts(){
+  const c=comboVal('client-sel','client-new');
+  const acc=await fetchAccounts(c);
+  fillCombo('account-sel','account-new',acc,document.getElementById('account-sel').dataset.current||'');
+}
+async function load(){
+  document.getElementById('hostname').value=HOST||'';
+  if(!HOST){
+    document.getElementById('status').textContent='Select a Host in the Grafana dropdown above';
+    document.getElementById('status').style.color='#f59e0b';
+    return;
+  }
+  const n=await fetch(API+'/api/v1/servers/'+encodeURIComponent(HOST)).then(r=>r.json());
+  document.getElementById('name').value=n.name||'';
+  const clients=await fetchClients();
+  fillCombo('client-sel','client-new',clients,n.client||'');
+  const acc=await fetchAccounts(n.client||'');
+  document.getElementById('account-sel').dataset.current=n.account||'';
+  fillCombo('account-sel','account-new',acc,n.account||'');
+}
+async function save(){
+  if(!HOST)return;
+  const body={
+    name:document.getElementById('name').value.trim(),
+    client:comboVal('client-sel','client-new'),
+    account:comboVal('account-sel','account-new')
+  };
+  const st=document.getElementById('status');
+  const hint=document.getElementById('hint');
+  const d=await fetch(API+'/api/v1/servers/'+encodeURIComponent(HOST),{
+    method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+  }).then(r=>r.json());
+  if(d.error){st.textContent=d.error;st.style.color='#ef4444';hint.textContent='';return;}
+  st.textContent='Saved';st.style.color='#22c55e';
+  hint.textContent='Refresh dashboard (F5) to update Client/Account filters';
+}
+__COMBO_JS__
+load();
+</script></body></html>

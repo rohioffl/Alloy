@@ -51,7 +51,7 @@ for arg in "$@"; do
 done
 
 REMOTE_WRITE_URL="${REMOTE_WRITE_URL:-http://localhost:9090/api/v1/write}"
-LOKI_URL="${LOKI_URL:-http://localhost:3000/loki/api/v1/push}"
+# LOKI_URL stays empty unless -loki is provided; log collection is then enabled.
 
 # ---- Logging -----------------------------------------------------------------
 log()  { printf "\033[1;34m==>\033[0m %s\n" "$*"; }
@@ -169,6 +169,41 @@ CENTRAL_HOST=$(echo "$REMOTE_WRITE_URL" | sed -E 's|https?://([^:/]+).*|\1|')
 PORT_API_URL="${PORT_API_URL:-http://${CENTRAL_HOST}:9099}"
 PORT_API_URL="${PORT_API_URL%/}"
 
+# Build optional Loki log-collection block (only when -loki is provided)
+if [ -n "$LOKI_URL" ]; then
+  LOKI_BLOCK="
+// LOG COLLECTION
+local.file_match \"system_logs\" {
+  path_targets = [
+    {__path__ = \"/var/log/syslog\", job = \"syslog\"},
+    {__path__ = \"/var/log/auth.log\", job = \"authlog\"},
+  ]
+}
+
+loki.source.file \"system_logs\" {
+  targets    = local.file_match.system_logs.targets
+  forward_to = [loki.relabel.add_host.receiver]
+}
+
+loki.relabel \"add_host\" {
+  forward_to = [loki.write.central.receiver]
+
+  rule {
+    target_label = \"host\"
+    replacement  = constants.hostname
+  }
+}
+
+loki.write \"central\" {
+  endpoint {
+    url = \"${LOKI_URL}\"
+  }
+}
+"
+else
+  LOKI_BLOCK=""
+fi
+
 cat > /etc/alloy/config.alloy << ALLOYEOF
 // Grafana Alloy - Node Agent
 // Generated on $(date -Iseconds)
@@ -229,10 +264,12 @@ prometheus.relabel "blackbox_labels" {
     target_label = "host"
     replacement  = constants.hostname
   }
-  // Blackbox sets job to the target name (Backend-api, Redis, …); copy to port label
+  // Blackbox sets job to "integrations/blackbox/<name>"; extract just <name> into port label
   rule {
     source_labels = ["job"]
+    regex         = "(?:integrations/blackbox/)?(.+)"
     target_label  = "port"
+    replacement   = "$1"
   }
   rule {
     target_label = "job"
@@ -272,32 +309,7 @@ prometheus.remote_write "central" {
 }
 
 // LOG COLLECTION
-local.file_match "system_logs" {
-  path_targets = [
-    {__path__ = "/var/log/syslog", job = "syslog"},
-    {__path__ = "/var/log/auth.log", job = "authlog"},
-  ]
-}
-
-loki.source.file "system_logs" {
-  targets    = local.file_match.system_logs.targets
-  forward_to = [loki.relabel.add_host.receiver]
-}
-
-loki.relabel "add_host" {
-  forward_to = [loki.write.central.receiver]
-
-  rule {
-    target_label = "host"
-    replacement  = constants.hostname
-  }
-}
-
-loki.write "central" {
-  endpoint {
-    url = "${LOKI_URL}"
-  }
-}
+${LOKI_BLOCK}
 ALLOYEOF
 
 ok "Config: /etc/alloy/config.alloy"

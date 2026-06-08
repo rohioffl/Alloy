@@ -1,2 +1,7 @@
 .kiro/
 .cursor
+
+# FastAPI service local env
+api/.venv/
+**/__pycache__/
+*.pyc

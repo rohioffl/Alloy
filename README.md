@@ -15,6 +15,7 @@ Centralized server monitoring with **Grafana Alloy** on each node and a **Centra
 - [Install a Node](#install-a-node)
 - [Token Reference](#token-reference)
 - [Manage Ports](#manage-ports)
+- [Client Access (Multi-Tenancy)](#client-access-multi-tenancy)
 - [File Layout](#file-layout)
 - [Troubleshooting](#troubleshooting)
 
@@ -103,18 +104,167 @@ curl -X POST "$API/api/v1/servers/HOSTNAME/ports" \
 
 Full docs: `GET http://CENTRAL_IP:9099/api/v1/docs`
 
+## Client Access (Multi-Tenancy)
+
+Give each client a **read-only Grafana login** that shows **only their own servers**. This uses one Grafana instance with a separate **Organization per client**. Clients are Viewers and cannot see or query other clients' data.
+
+```
+Main Org (you)                    Client Org "Acme"            Client Org "Globex"
+──────────────                    ─────────────────            ───────────────────
+All dashboards + manager          "My Servers" dashboard       "My Servers" dashboard
+Assign server → client            Viewer users only            Viewer users only
+See everything                    client="acme" hardcoded      client="globex" hardcoded
+        │
+        └── all read from one shared Prometheus
+```
+
+### Concept
+
+- A server's **client** is set in the Main Org (All Servers page or API). This is just a label in the Central API.
+- Each client gets a Grafana **Org** with its own datasources and a **My Servers** dashboard whose queries are hardcoded to that client.
+- Client users are **Viewers** in only their org — they cannot edit queries, so they cannot escape their client filter.
+
+### Step 1 — Assign a server to a client
+
+Via the Main Org UI: open **All Servers**, click the server, set **Client**, **Account**, and **Name**, then Save.
+
+Or via API:
+
+```bash
+API=http://CENTRAL_IP:9099
+
+curl -X PUT "$API/api/v1/servers/HOSTNAME" \
+  -H "Content-Type: application/json" \
+  -d '{"client":"acme","account":"prod","name":"Acme Web 1"}'
+```
+
+Verify the client now has servers:
+
+```bash
+curl "$API/client-hosts?client=acme&account=.*"
+curl "$API/client-accounts?client=acme"
+```
+
+### Step 2 — Create the client Org
+
+Grafana org/user management needs Grafana **admin** basic auth (default `admin:admin`).
+
+```bash
+GRAFANA=http://CENTRAL_IP:3000
+ADMIN='admin:admin'
+
+# Create the org → note the returned orgId
+curl -s -u "$ADMIN" -X POST "$GRAFANA/api/orgs" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Client - acme"}'
+# => {"orgId": 3, ...}
+ORGID=3
+```
+
+### Step 3 — Add datasources to the client Org
+
+```bash
+# Point admin at the new org first
+curl -s -u "$ADMIN" -X POST "$GRAFANA/api/user/using/$ORGID"
+
+# Prometheus (note the returned uid)
+curl -s -u "$ADMIN" -X POST "$GRAFANA/api/datasources" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Prometheus","type":"prometheus","access":"proxy","url":"http://localhost:9090","isDefault":true}'
+
+# Infinity (for client-scoped dropdowns)
+curl -s -u "$ADMIN" -X POST "$GRAFANA/api/datasources" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Port Monitor API","type":"yesoreyeram-infinity-datasource","access":"proxy","url":"http://localhost:9099"}'
+```
+
+Record both returned **uids** — you'll put them in the dashboard JSON.
+
+### Step 4 — Deploy the client dashboard
+
+1. Copy `client-dashboards/internal-summary.json` to `client-dashboards/acme-summary.json`.
+2. Edit the copy and replace:
+   - `client-internal-summary` → `client-acme-summary` (the `uid`)
+   - every `internal` → `acme` (the constant variable + all query filters + endpoint URLs)
+   - the Prometheus datasource `uid` → your client org's Prometheus uid
+   - the Infinity datasource `uid` → your client org's Infinity uid
+3. Deploy into the client org:
+
+```bash
+curl -s -u "$ADMIN" -X POST "$GRAFANA/api/user/using/$ORGID" >/dev/null
+curl -s -u "$ADMIN" -X POST "$GRAFANA/api/dashboards/db" \
+  -H "Content-Type: application/json" \
+  -d @client-dashboards/acme-summary.json
+```
+
+### Step 5 — Create the client (Viewer) user
+
+```bash
+# Create the user
+curl -s -u "$ADMIN" -X POST "$GRAFANA/api/admin/users" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Acme Client","login":"acme-client","password":"ChangeMe@2026"}'
+# => {"id": 4, ...}
+USERID=4
+
+# Add to the client org as Viewer
+curl -s -u "$ADMIN" -X POST "$GRAFANA/api/orgs/$ORGID/users" \
+  -H "Content-Type: application/json" \
+  -d '{"loginOrEmail":"acme-client","role":"Viewer"}'
+
+# Remove from Main Org (so they cannot see everything)
+curl -s -u "$ADMIN" -X DELETE "$GRAFANA/api/orgs/1/users/$USERID"
+```
+
+The client now logs in at `http://CENTRAL_IP:3000` with `acme-client` / their password and sees only the **My Servers** dashboard scoped to `acme`.
+
+### Client-scoped API endpoints
+
+These return only live-assigned servers for a client (used by client dashboards):
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /client-accounts?client=X` | Accounts that client actually has servers in |
+| `GET /client-hosts?client=X&account=Y` | Servers for that client (and optional account) |
+
+### Reassign or remove a client's server
+
+Change the server's client in the Main Org (or via the API `PUT` above). The client dashboards update within ~30s — no node reinstall needed. Setting client back to `Unassigned` removes it from any client view.
+
+### Example already built
+
+| Item | Value |
+|------|-------|
+| Org | `Client - internal` (id 2) |
+| Dashboard | `My Servers` → `/d/client-internal-summary` |
+| Login | `internal-client` / `Internal@2026` (Viewer) |
+
 ## File Layout
 
 ```
 monitoring/
 ├── setup-server.sh        # Central server (run once)
 ├── install-alloy.sh       # Node agent (run on every server)
-├── port-monitor-api.py    # Central API service
+├── api/                   # Central Monitoring API (FastAPI + uvicorn)
+│   ├── app/
+│   │   ├── main.py        # FastAPI app — all routes
+│   │   ├── config.py      # env vars / paths / config loader
+│   │   ├── storage.py     # nodes/ports/taxonomy JSON I/O + Prometheus sync
+│   │   ├── grafana.py     # Grafana Admin API helpers + client dashboard builder
+│   │   └── ui/            # embedded HTML/JS templates (served from :9099)
+│   ├── requirements.txt
+│   └── run.py             # local entrypoint (uvicorn)
 ├── scripts/
 │   ├── patch-alloy-port-probes.sh  # Fix per-port labels
 │   └── fix-dashboards.py           # Normalize dashboard placeholders
-└── dashboards/            # Grafana dashboard JSON files
+├── dashboards/            # Main Org dashboard JSON files
+└── client-dashboards/     # Per-client "My Servers" dashboards (templated)
 ```
+
+The Central Monitoring API runs as a **FastAPI** app under **uvicorn** (systemd
+service `port-monitor-api`, `ExecStart=/opt/port-monitor-api/.venv/bin/uvicorn app.main:app`).
+It uses the data files (`/var/lib/port-monitor/*`), env vars, and serves the
+embedded UI from `:9099`. See `api/README.md` for details.
 
 ## Troubleshooting
 
