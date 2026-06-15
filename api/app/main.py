@@ -115,6 +115,7 @@ def _sync_alerting():
     and rebuild the notification policy (host-membership routing). Safe to call
     often; never raises into the request path."""
     try:
+        gf._grafana_switch_org(1)  # alerting lives in the main org
         data = st.load_alert_recipients()
         admin_info = data.pop(ADMIN_KEY, None)  # admin handled separately (root catch-all)
         host_map = st.client_host_map()
@@ -826,6 +827,7 @@ async def grafana_orgs_create(request: Request):
     existing = st._read_json(GRAFANA_ORGS_FILE, {})
     existing[client] = cfg
     st._write_json(GRAFANA_ORGS_FILE, existing)
+    gf._grafana_switch_org(1)
     return J({"message": f"Client org '{org_name}' created", "org_id": org_id,
               "login": login, "password": password, "dashboard_url": url}, 201)
 
@@ -850,4 +852,5 @@ async def grafana_orgs_delete(client: str):
     gf._grafana_delete_org(org_id)
     existing.pop(client, None)
     st._write_json(GRAFANA_ORGS_FILE, existing)
+    gf._grafana_switch_org(1)
     return J({"message": f"Client org for '{client}' deleted"})

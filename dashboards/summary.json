@@ -764,11 +764,7 @@
         "pluginVersion": "13.0.1+security-01",
         "targets": [
           {
-            "datasource": {
-              "type": "prometheus",
-              "uid": "__PROM_DS_UID__"
-            },
-            "expr": "node_uname_info{host=\"$host\",job=\"integrations/unix\"}",
+            "expr": "max by (host, machine, nodename, release, sysname) (node_uname_info{host=\"$host\",job=\"integrations/unix\"}) * on(host) group_left(name, ip, client, account) monitor_node_info",
             "format": "table",
             "instant": true,
             "refId": "A"
@@ -783,24 +779,36 @@
                 "Time": true,
                 "Value": true,
                 "__name__": true,
-                "domainname": true,
-                "env": true,
                 "host": true,
+                "hostname": true,
                 "instance": true,
-                "job": true,
-                "version": true
+                "job": true
+              },
+              "indexByName": {
+                "name": 0,
+                "ip": 1,
+                "client": 2,
+                "account": 3,
+                "machine": 4,
+                "nodename": 5,
+                "release": 6,
+                "sysname": 7
               },
               "renameByName": {
+                "name": "Display Name",
+                "ip": "IP",
+                "client": "Client",
+                "account": "Account",
                 "machine": "Arch",
                 "nodename": "Hostname",
                 "release": "Kernel",
-                "sysname": "OS",
-                "port": "Port"
+                "sysname": "OS"
               }
             }
           }
         ],
-        "type": "table"
+        "type": "table",
+        "description": "Server identity & metadata. Client/Account/Name/IP from the central registry (authoritative)."
       },
       {
         "datasource": {
@@ -869,11 +877,7 @@
         "pluginVersion": "13.0.1+security-01",
         "targets": [
           {
-            "datasource": {
-              "type": "prometheus",
-              "uid": "__PROM_DS_UID__"
-            },
-            "expr": "probe_success{host=\"$host\",job=\"blackbox\"}",
+            "expr": "max by (host, port) (probe_success{host=\"$host\",job=\"blackbox\"})",
             "format": "table",
             "instant": true,
             "refId": "A"
@@ -887,10 +891,13 @@
               "excludeByName": {
                 "Time": true,
                 "__name__": true,
-                "env": true,
                 "host": true,
                 "instance": true,
                 "job": true
+              },
+              "indexByName": {
+                "port": 0,
+                "Value": 1
               },
               "renameByName": {
                 "Value": "Status",
