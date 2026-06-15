@@ -266,6 +266,50 @@ service `port-monitor-api`, `ExecStart=/opt/port-monitor-api/.venv/bin/uvicorn a
 It uses the data files (`/var/lib/port-monitor/*`), env vars, and serves the
 embedded UI from `:9099`. See `api/README.md` for details.
 
+## Alerting
+
+Email alerts are delivered via **AWS SES SMTP** (configured in `grafana.ini`,
+region `ap-south-1`). Five global alert rules live in the **Monitoring** folder
+and are fully editable in Grafana's native Alerting UI (`/alerting/list`):
+
+| Rule | Condition | For | Severity |
+|------|-----------|-----|----------|
+| Node Down | `up{job="integrations/unix"} == 0` | 2m | critical |
+| Port Down | `probe_success{job="blackbox"} == 0` | 2m | critical |
+| High CPU Usage | CPU > 90% | 5m | warning |
+| High Memory Usage | Memory > 90% | 5m | warning |
+| Low Disk Space | `/` usage > 90% | 5m | warning |
+
+The main **Fleet Overview** dashboard has an "Active Alerts" panel for an
+at-a-glance view.
+
+### Per-client alert recipients
+
+Set from **All Servers → Clients & Accounts → Alert recipient email**. Each
+client can have **one or more** recipient emails (comma-separated); the admin
+(contact point `email-zentra`) always receives every alert as a fallback.
+
+Routing is by **host membership** (not the metric `client` label): when you
+save a client's email, the API creates a `client-<slug>` contact point and a
+notification-policy route matching `host =~ "(their hosts)"`. The host regex is
+regenerated automatically whenever servers are assigned/reassigned/removed, so
+routing stays correct without touching nodes. Data: `/var/lib/port-monitor/alert_recipients.json`.
+
+Relevant endpoints:
+- `GET /api/v1/alert-recipients`
+- `GET /api/v1/clients/{client}/alert-email`
+- `PUT /api/v1/clients/{client}/alert-email` `{emails, enabled}` (emails = list or comma-separated string)
+- `GET/PUT /api/v1/alert-recipients/all-clients` `{recipients, enabled}` — recipients that receive **every** alert across all clients (NOC/ops). Set via the "All-clients alert recipients" card on the Clients & Accounts tab.
+- `GET/PUT /api/v1/alert-recipients/admin` — the admin/fallback contact point (`email-zentra`); always receives every alert.
+
+### Alert groups (multiple servers, shared recipients)
+
+A reusable **alert group** is a named set of servers (across any client/account) with its own recipient list — like Site24x7's User Alert Group + Monitor Group. Managed from **All Servers → Alert Groups**. A server can belong to several groups; each group's enabled recipients are notified for that server's alerts (alongside admin and any per-client recipient), routed by `host=~"(group hosts)"`. Data: `/var/lib/port-monitor/alert_groups.json`.
+
+- `GET /api/v1/alert-groups`
+- `POST /api/v1/alert-groups` `{name, hosts, recipients, enabled}`
+- `GET/PUT/DELETE /api/v1/alert-groups/{id}`
+
 ## Troubleshooting
 
 ```bash

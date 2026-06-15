@@ -21,6 +21,8 @@ from .config import (
     TAXONOMY_FILE,
     TIMESTAMP,
 )
+from .config import ALERT_RECIPIENTS_FILE
+from .config import ALERT_GROUPS_FILE
 
 
 # ---- low-level JSON I/O ------------------------------------------------------
@@ -440,3 +442,200 @@ def migrate_nodes():
             changed = True
     if changed:
         save_nodes(nodes)
+
+
+# ---- alert recipients (per-client email) ------------------------------------
+
+def parse_emails(value):
+    """Accept a list or a comma/semicolon/space/newline-separated string and
+    return a clean, de-duplicated list of addresses (order preserved)."""
+    if isinstance(value, list):
+        parts = value
+    else:
+        parts = re.split(r"[,;\s]+", value or "")
+    out = []
+    for p in parts:
+        p = (p or "").strip()
+        if p and p not in out:
+            out.append(p)
+    return out
+
+
+def _coerce_recipients(value):
+    """Accept many shapes and return a list of {'email','enabled'} dicts:
+    - "a@x.com, b@y.com"            -> both enabled
+    - ["a@x.com", "b@y.com"]        -> both enabled
+    - [{"email","enabled"}, ...]    -> as given
+    """
+    if isinstance(value, str):
+        return [{"email": e, "enabled": True} for e in parse_emails(value)]
+    if isinstance(value, list):
+        out = []
+        for r in value:
+            if isinstance(r, str):
+                out.append({"email": r.strip(), "enabled": True})
+            elif isinstance(r, dict):
+                out.append({"email": (r.get("email") or "").strip(),
+                            "enabled": bool(r.get("enabled", True))})
+        return out
+    return []
+
+
+def _normalize_recipient(info):
+    """Normalize a stored record to {'recipients': [{'email','enabled'}]}.
+    Backward compatible with the old {'email': str} and {'emails': [...], 'enabled': bool}."""
+    if not isinstance(info, dict):
+        return {"recipients": []}
+    recips = info.get("recipients")
+    if recips is None:
+        emails = info.get("emails")
+        if emails is None and info.get("email"):
+            emails = parse_emails(info.get("email"))
+        emails = parse_emails(emails or [])
+        en = bool(info.get("enabled", True))
+        recips = [{"email": e, "enabled": en} for e in emails]
+    out, seen = [], set()
+    for r in _coerce_recipients(recips):
+        e = r["email"]
+        if e and e not in seen:
+            seen.add(e)
+            out.append({"email": e, "enabled": bool(r["enabled"])})
+    return {"recipients": out}
+
+
+def load_alert_recipients():
+    """{client: {'recipients': [{'email','enabled'}]}}"""
+    raw = _read_json(ALERT_RECIPIENTS_FILE, {})
+    return {c: _normalize_recipient(v) for c, v in raw.items()}
+
+
+def save_alert_recipients(data):
+    _write_json(ALERT_RECIPIENTS_FILE, data)
+
+
+def get_alert_recipient(client):
+    return load_alert_recipients().get(client, {"recipients": []})
+
+
+def enabled_emails(info):
+    """Return the list of enabled addresses from a normalized record."""
+    return [r["email"] for r in (info or {}).get("recipients", []) if r.get("enabled")]
+
+
+def set_alert_recipient(client, recipients):
+    """recipients: list of {email,enabled} | list of str | comma string."""
+    client = (client or "").strip()
+    data = load_alert_recipients()
+    norm = _normalize_recipient({"recipients": _coerce_recipients(recipients)})
+    if not norm["recipients"]:
+        data.pop(client, None)
+    else:
+        data[client] = norm
+    save_alert_recipients(data)
+    return data.get(client, {"recipients": []})
+
+
+def client_host_map():
+    """Authoritative client -> [hostnames] mapping from the node registry."""
+    out = {}
+    for n in load_nodes():
+        c = node_client(n)
+        out.setdefault(c, []).append(n["hostname"])
+    return out
+
+
+# ---- alert groups (named set of servers + recipients) -----------------------
+
+def _normalize_group(g):
+    if not isinstance(g, dict):
+        return None
+    gid = (g.get("id") or "").strip()
+    name = (g.get("name") or "").strip()
+    hosts = [h for h in (g.get("hosts") or []) if isinstance(h, str) and h.strip()]
+    hosts = sorted(dict.fromkeys(h.strip() for h in hosts))
+    recips = _normalize_recipient({"recipients": _coerce_recipients(g.get("recipients", []))})["recipients"]
+    return {
+        "id": gid,
+        "name": name,
+        "hosts": hosts,
+        "recipients": recips,
+        "enabled": bool(g.get("enabled", True)),
+    }
+
+
+def load_alert_groups():
+    raw = _read_json(ALERT_GROUPS_FILE, {"groups": []})
+    groups = []
+    for g in raw.get("groups", []):
+        ng = _normalize_group(g)
+        if ng and ng["id"]:
+            groups.append(ng)
+    return groups
+
+
+def save_alert_groups(groups):
+    _write_json(ALERT_GROUPS_FILE, {"groups": groups})
+
+
+def get_alert_group(group_id):
+    return next((g for g in load_alert_groups() if g["id"] == group_id), None)
+
+
+def _new_group_id():
+    import uuid
+    return "grp-" + uuid.uuid4().hex[:8]
+
+
+def upsert_alert_group(group):
+    """Create (no id) or update (with id) a group. Returns the saved group."""
+    groups = load_alert_groups()
+    ng = _normalize_group(group) or {}
+    if not ng.get("name"):
+        return None, "group name is required"
+    if not ng.get("id"):
+        ng["id"] = _new_group_id()
+        groups.append(ng)
+    else:
+        found = False
+        for i, g in enumerate(groups):
+            if g["id"] == ng["id"]:
+                groups[i] = ng
+                found = True
+                break
+        if not found:
+            groups.append(ng)
+    save_alert_groups(groups)
+    return ng, None
+
+
+def delete_alert_group(group_id):
+    groups = load_alert_groups()
+    remaining = [g for g in groups if g["id"] != group_id]
+    if len(remaining) == len(groups):
+        return False
+    save_alert_groups(remaining)
+    return True
+
+
+def host_group_ids(host):
+    """Group ids that currently include this host."""
+    return [g["id"] for g in load_alert_groups() if host in g.get("hosts", [])]
+
+
+def set_host_groups(host, group_ids):
+    """Set the exact set of groups this host belongs to (add/remove accordingly)."""
+    want = set(group_ids or [])
+    groups = load_alert_groups()
+    changed = False
+    for g in groups:
+        in_group = host in g.get("hosts", [])
+        should = g["id"] in want
+        if should and not in_group:
+            g["hosts"] = sorted(set(g.get("hosts", [])) | {host})
+            changed = True
+        elif not should and in_group:
+            g["hosts"] = [h for h in g.get("hosts", []) if h != host]
+            changed = True
+    if changed:
+        save_alert_groups(groups)
+    return [g["id"] for g in groups if host in g.get("hosts", [])]

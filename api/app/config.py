@@ -13,12 +13,18 @@ CONFIG_FILE = os.environ.get("MONITOR_CONFIG", "/etc/port-monitor/config.json")
 NODES_FILE = os.path.join(DATA_DIR, "nodes.json")
 TAXONOMY_FILE = os.path.join(DATA_DIR, "taxonomy.json")
 GRAFANA_ORGS_FILE = os.path.join(DATA_DIR, "grafana_orgs.json")
+ALERT_RECIPIENTS_FILE = os.path.join(DATA_DIR, "alert_recipients.json")
+ALERT_GROUPS_FILE = os.path.join(DATA_DIR, "alert_groups.json")
+# Admin contact point that always receives every alert (catch-all / CC).
+ADMIN_RECEIVER = os.environ.get("MONITOR_ADMIN_RECEIVER", "email-zentra")
 LISTEN_HOST = os.environ.get("MONITOR_HOST", "0.0.0.0")
 LISTEN_PORT = int(os.environ.get("MONITOR_PORT", "9099"))
 PROMETHEUS_URL = os.environ.get("MONITOR_PROMETHEUS_URL", "http://127.0.0.1:9090").rstrip("/")
 
 DEFAULT_CLIENT = "Unassigned"
 DEFAULT_ACCOUNT = "default"
+# Reserved recipient key for the admin/fallback contact point (root catch-all).
+ADMIN_KEY = "__admin__"
 
 
 def TIMESTAMP():

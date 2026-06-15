@@ -15,6 +15,8 @@ from .config import (
     CONFIG_FILE,
     GRAFANA_ORGS_FILE,
     NODES_FILE,
+    ADMIN_RECEIVER,
+    ADMIN_KEY,
     api_key,
     install_token,
     load_config,
@@ -108,6 +110,53 @@ def _require_write_auth(request: Request) -> bool:
     return _auth_header(request) == expected
 
 
+def _sync_alerting():
+    """Ensure each client's email contact point reflects its enabled addresses
+    and rebuild the notification policy (host-membership routing). Safe to call
+    often; never raises into the request path."""
+    try:
+        data = st.load_alert_recipients()
+        admin_info = data.pop(ADMIN_KEY, None)  # admin handled separately (root catch-all)
+        host_map = st.client_host_map()
+        active = {}
+        # 1. upsert contact points for clients that have >=1 enabled address
+        for client, info in data.items():
+            emails = st.enabled_emails(info)
+            if emails:
+                active[client] = emails
+                gf._upsert_email_contact_point(gf._client_receiver_name(client), emails)
+        # 2. rebuild policy (routes only reference active receivers)
+        group_routes = []
+        active_group_receivers = set()
+        for g in st.load_alert_groups():
+            if not g.get("enabled") or not g.get("hosts"):
+                continue
+            emails = st.enabled_emails(g)
+            if not emails:
+                continue
+            rname = gf._group_receiver_name(g["id"])
+            gf._upsert_email_contact_point(rname, emails)
+            group_routes.append({"receiver": rname, "hosts": g["hosts"]})
+            active_group_receivers.add(rname)
+        ok, msg = gf.rebuild_notification_policy(active, host_map, ADMIN_RECEIVER, group_routes)
+        # 2b. admin/fallback contact point reflects its enabled addresses
+        if admin_info is not None:
+            gf._upsert_email_contact_point(ADMIN_RECEIVER, st.enabled_emails(admin_info))
+        # 3. remove managed contact points no longer referenced
+        active_receivers = {gf._client_receiver_name(c) for c in active} | active_group_receivers
+        for cp in gf._list_contact_points():
+            name = cp.get("name", "")
+            managed = name == gf.ALL_CLIENTS_RECEIVER or name.startswith("client-") or name.startswith("group-")
+            if managed and name not in active_receivers:
+                try:
+                    gf._delete_email_contact_point(name)
+                except Exception:
+                    pass
+        return ok, msg
+    except Exception as ex:  # never break the caller
+        return False, str(ex)
+
+
 def _hosts_variable(client="", account="", include_unregistered=False):
     nodes = list(st.load_nodes())
     if include_unregistered:
@@ -122,29 +171,32 @@ def _hosts_variable(client="", account="", include_unregistered=False):
 
 # ---- embedded UI ------------------------------------------------------------
 
+_NOCACHE = {"Cache-Control": "no-store, max-age=0", "Pragma": "no-cache"}
+
+
 @app.get("/", response_class=HTMLResponse)
 async def ui_index():
-    return HTMLResponse(ui.render("index.html"))
+    return HTMLResponse(ui.render("index.html"), headers=_NOCACHE)
 
 
 @app.get("/nodes-only", response_class=HTMLResponse)
 async def ui_nodes(host: str = ""):
-    return HTMLResponse(ui.render("nodes.html", host=host))
+    return HTMLResponse(ui.render("nodes.html", host=host), headers=_NOCACHE)
 
 
 @app.get("/ports-only", response_class=HTMLResponse)
 async def ui_ports():
-    return HTMLResponse(ui.render("ports.html"))
+    return HTMLResponse(ui.render("ports.html"), headers=_NOCACHE)
 
 
 @app.get("/inventory", response_class=HTMLResponse)
 async def ui_inventory():
-    return HTMLResponse(ui.render("inventory.html"))
+    return HTMLResponse(ui.render("inventory.html"), headers=_NOCACHE)
 
 
 @app.get("/servers", response_class=HTMLResponse)
 async def ui_servers():
-    return HTMLResponse(ui.render("inventory.html"))
+    return HTMLResponse(ui.render("inventory.html"), headers=_NOCACHE)
 
 
 # ---- health / docs / config -------------------------------------------------
@@ -234,6 +286,19 @@ async def get_server_targets(host: str):
     return J(st.alloy_targets(host))
 
 
+@app.get("/api/v1/servers/{host}/groups")
+async def get_host_groups(host: str):
+    return J({"host": host, "group_ids": st.host_group_ids(host)})
+
+
+@app.put("/api/v1/servers/{host}/groups")
+async def set_host_groups_ep(host: str, request: Request):
+    data = await _body(request)
+    ids = st.set_host_groups(host, data.get("group_ids", []))
+    ok, msg = _sync_alerting()
+    return J({"host": host, "group_ids": ids, "synced": ok, "message": msg})
+
+
 @app.post("/api/v1/servers/register")
 @app.post("/nodes/register")
 async def register_server(request: Request):
@@ -277,6 +342,7 @@ async def update_server(host: str, request: Request):
         existing["hostname"] = st.normalize_host(data["hostname"])
     st.save_nodes(nodes)
     st.record_taxonomy(existing.get("client", ""), existing.get("account", ""))
+    _sync_alerting()
     return J({"message": f"Saved {existing['hostname']}", "hostname": existing["hostname"]})
 
 
@@ -313,6 +379,7 @@ def _register(data, auto=False):
         existing["last_seen"] = TIMESTAMP()
         st.save_nodes(nodes)
         st.record_taxonomy(existing["client"], existing["account"])
+        _sync_alerting()
         return J({"message": f"Updated {host}", "hostname": host})
 
     c, a, nm = st.normalize_metadata(data.get("client", ""), data.get("account", ""), data.get("name", ""))
@@ -328,6 +395,7 @@ def _register(data, auto=False):
     nodes.append(entry)
     st.save_nodes(nodes)
     st.record_taxonomy(c, a)
+    _sync_alerting()
     return J({"message": f"{'Registered' if auto else 'Added'} {host}", "hostname": host}, 201)
 
 
@@ -341,6 +409,7 @@ def _delete_server(host):
     pf = st.get_port_file(host)
     if os.path.exists(pf):
         os.remove(pf)
+    _sync_alerting()
     return J({"message": f"Removed {host}"})
 
 
@@ -557,6 +626,117 @@ async def legacy_ports(host: str):
     return J({"host": host, "ports": ports, "count": len(ports)})
 
 
+# ---- alert recipients (per-client email) ------------------------------------
+
+@app.get("/api/v1/alert-recipients")
+async def alert_recipients_all():
+    return J(st.load_alert_recipients())
+
+
+@app.get("/api/v1/alert-recipients/admin")
+async def get_admin_recipient():
+    info = st.load_alert_recipients().get(ADMIN_KEY)
+    if info is None:
+        # first time: seed from the existing admin contact point so zentra@ shows up
+        addrs = gf._get_contact_point_addresses(ADMIN_RECEIVER)
+        info = st.set_alert_recipient(ADMIN_KEY, [{"email": a, "enabled": True} for a in addrs])
+    return J({"recipients": info.get("recipients", [])})
+
+
+@app.put("/api/v1/alert-recipients/admin")
+async def set_admin_recipient(request: Request):
+    data = await _body(request)
+    recipients = data.get("recipients")
+    if recipients is None:
+        recipients = data.get("emails", data.get("email", ""))
+    info = st.set_alert_recipient(ADMIN_KEY, recipients)
+    ok, msg = _sync_alerting()
+    return J({"recipients": info.get("recipients", []), "synced": ok, "message": msg})
+
+
+@app.get("/api/v1/alert-recipients/all-clients")
+async def get_all_clients_recipient():
+    info = st.get_alert_recipient(gf.ALL_CLIENTS_KEY)
+    return J({"recipients": info.get("recipients", [])})
+
+
+@app.put("/api/v1/alert-recipients/all-clients")
+async def set_all_clients_recipient(request: Request):
+    data = await _body(request)
+    recipients = data.get("recipients")
+    if recipients is None:
+        recipients = data.get("emails", data.get("email", ""))
+    info = st.set_alert_recipient(gf.ALL_CLIENTS_KEY, recipients)
+    ok, msg = _sync_alerting()
+    return J({"recipients": info.get("recipients", []), "synced": ok, "message": msg})
+
+
+@app.get("/api/v1/clients/{client}/alert-email")
+async def get_alert_email(client: str):
+    info = st.get_alert_recipient(client)
+    return J({"client": client, "recipients": info.get("recipients", [])})
+
+
+@app.put("/api/v1/clients/{client}/alert-email")
+async def set_alert_email(client: str, request: Request):
+    # Open for the same-origin admin inventory UI, consistent with the taxonomy/
+    # server-edit endpoints. The All Servers page is main-org admin only, and :9099
+    # is expected to be network-restricted.
+    data = await _body(request)
+    recipients = data.get("recipients")
+    if recipients is None:  # legacy callers
+        recipients = data.get("emails", data.get("email", ""))
+    info = st.set_alert_recipient(client, recipients)
+    ok, msg = _sync_alerting()
+    return J({"client": client, "recipients": info.get("recipients", []),
+              "synced": ok, "message": msg})
+
+
+# ---- alert groups (named set of servers + recipients) -----------------------
+
+@app.get("/api/v1/alert-groups")
+async def list_alert_groups():
+    return J({"groups": st.load_alert_groups()})
+
+
+@app.get("/api/v1/alert-groups/{group_id}")
+async def get_alert_group_ep(group_id: str):
+    g = st.get_alert_group(group_id)
+    if not g:
+        return J({"error": "not found"}, 404)
+    return J(g)
+
+
+@app.post("/api/v1/alert-groups")
+async def create_alert_group(request: Request):
+    data = await _body(request)
+    data.pop("id", None)  # force create
+    g, err = st.upsert_alert_group(data)
+    if err:
+        return J({"error": err}, 400)
+    ok, msg = _sync_alerting()
+    return J({"group": g, "synced": ok, "message": msg}, 201)
+
+
+@app.put("/api/v1/alert-groups/{group_id}")
+async def update_alert_group(group_id: str, request: Request):
+    data = await _body(request)
+    data["id"] = group_id
+    g, err = st.upsert_alert_group(data)
+    if err:
+        return J({"error": err}, 400)
+    ok, msg = _sync_alerting()
+    return J({"group": g, "synced": ok, "message": msg})
+
+
+@app.delete("/api/v1/alert-groups/{group_id}")
+async def remove_alert_group(group_id: str):
+    if not st.delete_alert_group(group_id):
+        return J({"error": "not found"}, 404)
+    ok, msg = _sync_alerting()
+    return J({"message": "Group removed", "synced": ok})
+
+
 # ---- grafana orgs -----------------------------------------------------------
 
 @app.get("/api/v1/grafana-orgs")
@@ -606,6 +786,10 @@ async def grafana_orgs_create(request: Request):
     inf_uid, _ = gf._grafana_add_datasource(org_id, "Port Monitor API", "yesoreyeram-infinity-datasource", "http://localhost:9099")
     dash = gf._build_client_dashboard(client, prom_uid, inf_uid)
     ok, url = gf._grafana_deploy_dashboard(org_id, dash)
+    fleet = gf._build_client_fleet_dashboard(client, prom_uid, inf_uid)
+    gf._grafana_deploy_dashboard(org_id, fleet)
+    for dd in gf._build_client_drilldowns(client, prom_uid, inf_uid):
+        gf._grafana_deploy_dashboard(org_id, dd)
     login = f"{client.lower().replace(' ', '-')}-client"
     user_id, umsg = gf._grafana_create_user(login, f"{client} Client", password)
     if user_id:

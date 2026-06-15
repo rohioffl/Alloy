@@ -42,6 +42,7 @@ input[readonly]{opacity:.75;cursor:not-allowed}
 <div class="mtabs">
 <span class="mtab active" data-v="servers">Servers</span>
 <span class="mtab" data-v="org">Clients &amp; Accounts</span>
+<span class="mtab" data-v="groups">Alert Groups</span>
 </div>
 <div id="view-servers">
 <p class="sub">From Alloy install. IP is fixed at install — re-run <code>install-alloy.sh</code> on the node to refresh it.</p>
@@ -69,6 +70,7 @@ input[readonly]{opacity:.75;cursor:not-allowed}
 <div class="field"><label>Client</label><select id="e-client-sel" onchange="onCombo('e-client-sel','e-client-new',refreshEditAccounts)"></select><input id="e-client-new" style="display:none;margin-top:6px" placeholder="New client name"/></div>
 <div class="field"><label>Account</label><select id="e-account-sel" onchange="onCombo('e-account-sel','e-account-new')"></select><input id="e-account-new" style="display:none;margin-top:6px" placeholder="New account name"/></div>
 <div class="field"><label>IP address</label><input id="e-ip" readonly/><p class="hint-ip">Detected at install (primary interface)</p></div>
+<div class="field"><label>Alert groups</label><div id="e-groups" style="max-height:140px;overflow:auto;border:1px solid #222;border-radius:6px;padding:8px;font-size:12px"></div></div>
 <button class="btn btn-primary" onclick="saveEdit()">Save</button>
 <div id="edit-status"></div>
 </div>
@@ -77,6 +79,16 @@ input[readonly]{opacity:.75;cursor:not-allowed}
 </div>
 <div id="view-org" style="display:none">
 <p class="sub">Manage the client → account hierarchy used in Grafana filters. Rename or merge to reassign all servers at once.</p>
+<div class="panel" style="margin-bottom:16px">
+<h3>Admin / fallback recipients</h3>
+<p class="sub" style="margin-bottom:10px">The global fallback contact point (<code>email-zentra</code>). Receives <b>every</b> alert. This is also your SMTP sender, so keep at least one address here.</p>
+<div id="org-adminalert"></div>
+</div>
+<div class="panel" style="margin-bottom:16px">
+<h3>All-clients alert recipients</h3>
+<p class="sub" style="margin-bottom:10px">These addresses receive <b>every</b> alert across all clients (in addition to the admin fallback). Use for a NOC / ops team.</p>
+<div id="org-allalert"></div>
+</div>
 <div class="org-grid">
 <div class="panel">
 <h3>Clients</h3>
@@ -96,8 +108,35 @@ input[readonly]{opacity:.75;cursor:not-allowed}
 <table style="margin-top:10px"><thead><tr><th>Account</th><th>Servers</th><th></th></tr></thead><tbody id="org-accounts"></tbody></table>
 <h3 style="font-size:12px;color:#888;margin:18px 0 8px">Client portal (Grafana org)</h3>
 <div id="org-access" style="font-size:12px;background:#0d0f14;border:1px solid #222;border-radius:6px;padding:12px"></div>
+<h3 style="font-size:12px;color:#888;margin:18px 0 8px">Alert recipient email</h3>
+<div id="org-alert" style="font-size:12px;background:#0d0f14;border:1px solid #222;border-radius:6px;padding:12px"></div>
 </div>
 <div id="org-status"></div>
+</div>
+</div>
+</div>
+<div id="view-groups" style="display:none">
+<p class="sub">Create a group of servers (across any client/account) and route their alerts to a shared recipient list. A server can belong to multiple groups; each enabled recipient is added alongside admin and any per-client recipients.</p>
+<div class="org-grid">
+<div class="panel">
+<h3>Groups</h3>
+<button class="btn btn-primary btn-sm" onclick="newGroup()">+ New group</button>
+<div id="group-list" style="margin-top:10px"></div>
+</div>
+<div class="panel">
+<h3 id="group-editor-title">New alert group</h3>
+<div class="field"><label>Group name</label><input id="group-name" placeholder="e.g. Customer A Web Team"/></div>
+<label style="display:flex;align-items:center;gap:6px;color:#aaa;margin:6px 0"><input type="checkbox" id="group-enabled" checked/> enabled</label>
+<h3 style="font-size:12px;color:#888;margin:14px 0 6px">Servers in this group</h3>
+<div id="group-servers" style="max-height:220px;overflow:auto;border:1px solid #222;border-radius:6px;padding:8px"></div>
+<h3 style="font-size:12px;color:#888;margin:14px 0 6px">Recipients</h3>
+<div id="group-recipients"></div>
+<button class="btn btn-secondary btn-sm" onclick="addGroupRecipient()">+ Add email</button>
+<div style="margin-top:14px">
+<button class="btn btn-primary btn-sm" onclick="saveGroup()">Save</button>
+<button class="btn btn-danger btn-sm" id="group-delete-btn" style="display:none" onclick="deleteGroup()">Delete</button>
+</div>
+<div id="group-status" style="margin-top:8px;font-size:12px"></div>
 </div>
 </div>
 </div>
@@ -108,7 +147,9 @@ document.querySelectorAll('.mtab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.mtab').forEach(x=>x.classList.toggle('active',x===t));
   document.getElementById('view-servers').style.display=t.dataset.v==='servers'?'block':'none';
   document.getElementById('view-org').style.display=t.dataset.v==='org'?'block':'none';
+  document.getElementById('view-groups').style.display=t.dataset.v==='groups'?'block':'none';
   if(t.dataset.v==='org')loadOrg();
+  if(t.dataset.v==='groups')loadGroups();
 });
 let servers=[], selected=null, orgData=null, orgClient=null;
 async function refreshEditAccounts(){
@@ -176,12 +217,31 @@ async function selectServer(host){
   const acc=await fetchAccounts(s.client||'');
   document.getElementById('e-account-sel').dataset.current=s.account||'';
   fillCombo('e-account-sel','e-account-new',acc,s.account||'');
+  renderServerGroups(host);
+}
+async function renderServerGroups(host){
+  const el=document.getElementById('e-groups');if(!el)return;
+  const all=await fetch(API+'/api/v1/alert-groups').then(r=>r.json()).catch(()=>({groups:[]}));
+  const mine=await fetch(API+'/api/v1/servers/'+encodeURIComponent(host)+'/groups').then(r=>r.json()).catch(()=>({group_ids:[]}));
+  const groups=all.groups||[];const sel={};(mine.group_ids||[]).forEach(id=>sel[id]=1);
+  if(!groups.length){el.innerHTML='<span style="color:#666">No alert groups yet. Create them in the Alert Groups tab.</span>';return;}
+  el.innerHTML='';
+  groups.forEach(g=>{
+    const row=document.createElement('label');
+    row.style.cssText='display:flex;align-items:center;gap:6px;padding:3px 0';
+    const cb=document.createElement('input');cb.type='checkbox';cb.className='e-group';cb.value=g.id;cb.checked=!!sel[g.id];
+    const span=document.createElement('span');span.textContent=g.name+(g.enabled?'':' (off)');
+    row.appendChild(cb);row.appendChild(span);el.appendChild(row);
+  });
 }
 async function saveEdit(){
   const host=document.getElementById('e-host').value;
   const st=document.getElementById('edit-status');
   const body={name:document.getElementById('e-name').value.trim(),client:comboVal('e-client-sel','e-client-new'),account:comboVal('e-account-sel','e-account-new')};
   const d=await fetch(API+'/api/v1/servers/'+encodeURIComponent(host),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());
+  // save alert-group membership
+  const gids=[].slice.call(document.querySelectorAll('#e-groups .e-group')).filter(c=>c.checked).map(c=>c.value);
+  await fetch(API+'/api/v1/servers/'+encodeURIComponent(host)+'/groups',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_ids:gids})}).catch(()=>{});
   st.textContent=d.message||d.error;st.style.color=d.error?'#ef4444':'#22c55e';
   if(!d.error)load().then(()=>selectServer(host));
 }
@@ -197,10 +257,12 @@ async function loadOrg(){
     ul.appendChild(li);
   });
   if(!orgClient&&orgData.clients&&orgData.clients.length)orgClient=orgData.clients[0].name;
+  if(!document.getElementById('org-adminalert-rows'))renderAdminAlert();
+  if(!document.getElementById('org-allalert-rows'))renderAllAlert();
   const cur=(orgData.clients||[]).find(x=>x.name===orgClient);
   document.getElementById('org-detail').style.display=cur?'block':'none';
   document.getElementById('org-detail-title').textContent=cur?('Client: '+cur.name):'Select a client';
-  if(cur){await loadOrgsCache();renderOrgAccess(cur.name);}
+  if(cur){await loadOrgsCache();renderOrgAccess(cur.name);renderOrgAlert(cur.name);}
   const tb=document.getElementById('org-accounts');tb.innerHTML='';
   if(cur)(cur.accounts||[]).forEach(a=>{
     const tr=document.createElement('tr');
@@ -308,5 +370,203 @@ async function orgDeletePortal(client){
   if(st){st.textContent='Deleting portal...';st.style.color='#aaa';}
   const d=await fetch(API+'/api/v1/grafana-orgs/'+encodeURIComponent(client),{method:'DELETE'}).then(r=>r.json()).catch(e=>({error:String(e)}));
   await loadOrgsCache();renderOrgAccess(client);
+}
+async function renderOrgAlert(client){
+  const el=document.getElementById('org-alert');
+  if(!el)return;
+  const d=await fetch(API+'/api/v1/clients/'+encodeURIComponent(client)+'/alert-email').then(r=>r.json()).catch(()=>({recipients:[]}));
+  const recips=(d.recipients&&d.recipients.length)?d.recipients:[];
+  el.innerHTML='<div id="org-alert-rows"></div>'
+    +'<button class="btn btn-secondary btn-sm" onclick="addAlertRow()">+ Add email</button>'
+    +'<div style="margin-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+    +'<button class="btn btn-primary btn-sm" onclick="saveOrgAlert()">Save</button>'
+    +'<button class="btn btn-secondary btn-sm" onclick="saveOrgAlert(true)">Remove all</button></div>'
+    +'<p style="color:#888;margin-top:8px">One box per recipient \u2014 toggle each on/off individually with its checkbox. Admin always receives every alert as a fallback. Enabled recipients get alerts on this client\u2019s assigned servers (routed by host).</p>'
+    +'<div id="org-alert-status" style="margin-top:8px"></div>';
+  const rows=document.getElementById('org-alert-rows');
+  recips.forEach(r=>rows.appendChild(makeAlertRow(r.email,r.enabled)));
+}
+function makeAlertRow(email,enabled){
+  const div=document.createElement('div');
+  div.className='alert-row';
+  div.style.cssText='display:flex;gap:8px;margin-bottom:6px;align-items:center';
+  const chk=document.createElement('input');
+  chk.type='checkbox';chk.className='alert-enabled';chk.checked=(enabled!==false);chk.title='enabled';
+  const inp=document.createElement('input');
+  inp.type='email';inp.className='alert-email';inp.placeholder='ops@client.com';
+  inp.style.cssText='flex:1;min-width:220px';inp.value=email||'';
+  const del=document.createElement('button');
+  del.className='btn btn-secondary btn-sm';del.textContent='\u2715';del.title='remove';
+  del.onclick=function(){div.remove();};
+  div.appendChild(chk);div.appendChild(inp);div.appendChild(del);
+  return div;
+}
+function addAlertRow(){
+  const rows=document.getElementById('org-alert-rows');
+  if(rows)rows.appendChild(makeAlertRow('',true));
+}
+function collectRecipients(containerId){
+  const out=[];const seen={};
+  document.querySelectorAll('#'+containerId+' .alert-row').forEach(row=>{
+    const v=(((row.querySelector('.alert-email')||{}).value)||'').trim();
+    const en=((row.querySelector('.alert-enabled')||{}).checked);
+    if(v&&!seen[v]){seen[v]=1;out.push({email:v,enabled:en});}
+  });
+  return out;
+}
+function recipSummary(recips){
+  return (recips||[]).map(r=>r.email+(r.enabled?'':' (off)')).join(', ');
+}
+async function saveOrgAlert(removeAll){
+  const client=orgClient;
+  const recipients=removeAll?[]:collectRecipients('org-alert-rows');
+  const st=document.getElementById('org-alert-status');
+  if(st){st.textContent='Saving...';st.style.color='#aaa';}
+  const d=await fetch(API+'/api/v1/clients/'+encodeURIComponent(client)+'/alert-email',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipients})}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  if(st){
+    if(d.error){st.textContent='Error: '+d.error;st.style.color='#ef4444';}
+    else{const s=recipSummary(d.recipients);st.textContent=(s?('Saved: '+s):'Removed')+(d.synced?' \u00b7 routing updated':(' \u00b7 sync issue: '+(d.message||'')));st.style.color=d.synced?'#22c55e':'#f59e0b';}
+  }
+  renderOrgAlert(client);
+}
+async function renderAllAlert(){
+  const el=document.getElementById('org-allalert');
+  if(!el)return;
+  const d=await fetch(API+'/api/v1/alert-recipients/all-clients').then(r=>r.json()).catch(()=>({recipients:[]}));
+  const recips=(d.recipients&&d.recipients.length)?d.recipients:[];
+  el.innerHTML='<div id="org-allalert-rows"></div>'
+    +'<button class="btn btn-secondary btn-sm" onclick="addAllAlertRow()">+ Add email</button>'
+    +'<div style="margin-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+    +'<button class="btn btn-primary btn-sm" onclick="saveAllAlert()">Save</button>'
+    +'<button class="btn btn-secondary btn-sm" onclick="saveAllAlert(true)">Remove all</button></div>'
+    +'<div id="org-allalert-status" style="margin-top:8px"></div>';
+  const rows=document.getElementById('org-allalert-rows');
+  recips.forEach(r=>rows.appendChild(makeAlertRow(r.email,r.enabled)));
+}
+function addAllAlertRow(){
+  const rows=document.getElementById('org-allalert-rows');
+  if(rows)rows.appendChild(makeAlertRow('',true));
+}
+async function saveAllAlert(removeAll){
+  const recipients=removeAll?[]:collectRecipients('org-allalert-rows');
+  const st=document.getElementById('org-allalert-status');
+  if(st){st.textContent='Saving...';st.style.color='#aaa';}
+  const d=await fetch(API+'/api/v1/alert-recipients/all-clients',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipients})}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  if(st){
+    if(d.error){st.textContent='Error: '+d.error;st.style.color='#ef4444';}
+    else{const s=recipSummary(d.recipients);st.textContent=(s?('Saved: '+s):'Removed')+(d.synced?' \u00b7 routing updated':(' \u00b7 sync issue: '+(d.message||'')));st.style.color=d.synced?'#22c55e':'#f59e0b';}
+  }
+  renderAllAlert();
+}
+async function renderAdminAlert(){
+  const el=document.getElementById('org-adminalert');
+  if(!el)return;
+  const d=await fetch(API+'/api/v1/alert-recipients/admin').then(r=>r.json()).catch(()=>({recipients:[]}));
+  const recips=(d.recipients&&d.recipients.length)?d.recipients:[];
+  el.innerHTML='<div id="org-adminalert-rows"></div>'
+    +'<button class="btn btn-secondary btn-sm" onclick="addAdminAlertRow()">+ Add email</button>'
+    +'<div style="margin-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+    +'<button class="btn btn-primary btn-sm" onclick="saveAdminAlert()">Save</button></div>'
+    +'<div id="org-adminalert-status" style="margin-top:8px"></div>';
+  const rows=document.getElementById('org-adminalert-rows');
+  recips.forEach(r=>rows.appendChild(makeAlertRow(r.email,r.enabled)));
+}
+function addAdminAlertRow(){
+  const rows=document.getElementById('org-adminalert-rows');
+  if(rows)rows.appendChild(makeAlertRow('',true));
+}
+async function saveAdminAlert(){
+  const recipients=collectRecipients('org-adminalert-rows');
+  const st=document.getElementById('org-adminalert-status');
+  if(!recipients.length){if(st){st.textContent='Keep at least one admin address (it is the global fallback / SMTP sender).';st.style.color='#f59e0b';}return;}
+  if(st){st.textContent='Saving...';st.style.color='#aaa';}
+  const d=await fetch(API+'/api/v1/alert-recipients/admin',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipients})}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  if(st){
+    if(d.error){st.textContent='Error: '+d.error;st.style.color='#ef4444';}
+    else{const s=recipSummary(d.recipients);st.textContent='Saved: '+s+(d.synced?' \u00b7 routing updated':(' \u00b7 sync issue: '+(d.message||'')));st.style.color=d.synced?'#22c55e':'#f59e0b';}
+  }
+  renderAdminAlert();
+}
+let groupsCache=[], editingGroupId=null, allServersCache=[];
+async function loadGroups(){
+  const d=await fetch(API+'/api/v1/alert-groups').then(r=>r.json()).catch(()=>({groups:[]}));
+  groupsCache=d.groups||[];
+  const s=await fetch(API+'/api/v1/servers').then(r=>r.json()).catch(()=>({servers:[]}));
+  allServersCache=s.servers||[];
+  renderGroupList();
+  if(editingGroupId&&!groupsCache.find(g=>g.id===editingGroupId))editingGroupId=null;
+  if(!editingGroupId)newGroup(); else editGroup(editingGroupId);
+}
+function renderGroupList(){
+  const el=document.getElementById('group-list');if(!el)return;
+  if(!groupsCache.length){el.innerHTML='<p style="color:#666;font-size:12px">No alert groups yet. Create one on the right.</p>';return;}
+  el.innerHTML='';
+  groupsCache.forEach(g=>{
+    const emails=(g.recipients||[]).filter(r=>r.enabled).map(r=>r.email).join(', ')||'\u2014';
+    const div=document.createElement('div');
+    div.className='card';div.style.cssText='cursor:pointer;padding:10px';
+    if(editingGroupId===g.id)div.style.borderColor='#f59e0b';
+    div.innerHTML='<strong>'+g.name+'</strong> <span class="badge">'+(g.hosts||[]).length+' servers</span>'+(g.enabled?'':' <span class="badge badge-unassigned">off</span>')+'<div class="sub" style="margin-top:4px">to: '+emails+'</div>';
+    div.onclick=()=>editGroup(g.id);
+    el.appendChild(div);
+  });
+}
+function newGroup(){
+  editingGroupId=null;
+  document.getElementById('group-name').value='';
+  document.getElementById('group-enabled').checked=true;
+  renderServerPicker([]);renderGroupRecipients([]);
+  document.getElementById('group-editor-title').textContent='New alert group';
+  document.getElementById('group-delete-btn').style.display='none';
+  const st=document.getElementById('group-status');if(st)st.textContent='';
+  renderGroupList();
+}
+function editGroup(id){
+  const g=groupsCache.find(x=>x.id===id);if(!g)return;
+  editingGroupId=id;
+  document.getElementById('group-name').value=g.name||'';
+  document.getElementById('group-enabled').checked=g.enabled!==false;
+  renderServerPicker(g.hosts||[]);renderGroupRecipients(g.recipients||[]);
+  document.getElementById('group-editor-title').textContent='Edit: '+g.name;
+  document.getElementById('group-delete-btn').style.display='inline-block';
+  renderGroupList();
+}
+function renderServerPicker(selected){
+  const el=document.getElementById('group-servers');if(!el)return;el.innerHTML='';
+  const sel={};(selected||[]).forEach(h=>sel[h]=1);
+  if(!allServersCache.length){el.innerHTML='<span style="color:#666;font-size:12px">No servers</span>';return;}
+  allServersCache.forEach(s=>{
+    const row=document.createElement('label');
+    row.style.cssText='display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px';
+    const cb=document.createElement('input');cb.type='checkbox';cb.className='group-server';cb.value=s.hostname;cb.checked=!!sel[s.hostname];
+    const span=document.createElement('span');span.innerHTML=s.hostname+(s.name?(' ('+s.name+')'):'')+' <span style="color:#666">'+(s.client||'')+'</span>';
+    row.appendChild(cb);row.appendChild(span);el.appendChild(row);
+  });
+}
+function renderGroupRecipients(recips){
+  const el=document.getElementById('group-recipients');if(!el)return;el.innerHTML='';
+  (recips||[]).forEach(r=>el.appendChild(makeAlertRow(r.email,r.enabled)));
+}
+function addGroupRecipient(){const el=document.getElementById('group-recipients');if(el)el.appendChild(makeAlertRow('',true));}
+async function saveGroup(){
+  const name=document.getElementById('group-name').value.trim();
+  const enabled=document.getElementById('group-enabled').checked;
+  const hosts=[].slice.call(document.querySelectorAll('#group-servers .group-server')).filter(c=>c.checked).map(c=>c.value);
+  const recipients=collectRecipients('group-recipients');
+  const st=document.getElementById('group-status');
+  if(!name){st.textContent='Group name required';st.style.color='#ef4444';return;}
+  st.textContent='Saving...';st.style.color='#aaa';
+  const url=API+'/api/v1/alert-groups'+(editingGroupId?('/'+editingGroupId):'');
+  const method=editingGroupId?'PUT':'POST';
+  const d=await fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:JSON.stringify({name,enabled,hosts,recipients})}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  if(d.error){st.textContent='Error: '+d.error;st.style.color='#ef4444';return;}
+  editingGroupId=(d.group&&d.group.id)||editingGroupId;
+  st.textContent='Saved'+(d.synced?' \u00b7 routing updated':' \u00b7 sync issue: '+(d.message||''));st.style.color=d.synced?'#22c55e':'#f59e0b';
+  loadGroups();
+}
+async function deleteGroup(){
+  if(!editingGroupId||!confirm('Delete this alert group? Servers are not affected.'))return;
+  await fetch(API+'/api/v1/alert-groups/'+editingGroupId,{method:'DELETE'}).catch(()=>{});
+  editingGroupId=null;loadGroups();
 }
 </script></body></html>

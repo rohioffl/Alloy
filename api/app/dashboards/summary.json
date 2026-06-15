@@ -1,0 +1,1180 @@
+{
+  "dashboard": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "id": 3003498843574272,
+    "liveNow": false,
+    "panels": [
+      {
+        "gridPos": {
+          "h": 2,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 100,
+        "options": {
+          "code": {
+            "language": "plaintext",
+            "showLineNumbers": false,
+            "showMiniMap": false
+          },
+          "content": "<div style=\"display:flex;align-items:flex-end;gap:24px;padding:8px 18px 0;border-bottom:1px solid rgba(255,255,255,0.08);font-family:Inter,system-ui,sans-serif;font-size:14px;\"><a style=\"color:#fff;text-decoration:none;padding:6px 2px 8px;border-bottom:2px solid #f59e0b;font-weight:600;\">Summary</a><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 8px;\" href=\"/d/alloy-dd-proc/server-drill-down-processes-alloy?var-client=${client}&var-account=${account}&var-host=${host}&${__url_time_range}\">Processes</a><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 8px;\" href=\"/d/alloy-dd-port/server-drill-down-ports-alloy?var-client=${client}&var-account=${account}&var-host=${host}&${__url_time_range}\">Ports</a><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 8px;\" href=\"/d/alloy-dd-cpu/server-drill-down-cpu-alloy?var-client=${client}&var-account=${account}&var-host=${host}&${__url_time_range}\">CPU</a><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 8px;\" href=\"/d/alloy-dd-mem/server-drill-down-memory-alloy?var-client=${client}&var-account=${account}&var-host=${host}&${__url_time_range}\">Memory</a><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 8px;\" href=\"/d/alloy-dd-disk/server-drill-down-disks-alloy?var-client=${client}&var-account=${account}&var-host=${host}&${__url_time_range}\">Disks</a><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 8px;\" href=\"/d/alloy-dd-net/server-drill-down-network-alloy?var-client=${client}&var-account=${account}&var-host=${host}&${__url_time_range}\">Network</a></div>",
+          "mode": "html"
+        },
+        "pluginVersion": "13.0.1+security-01",
+        "targets": [],
+        "title": "",
+        "transparent": true,
+        "type": "text"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_DS_UID__"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 2,
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "orange",
+                  "value": 95
+                },
+                {
+                  "color": "green",
+                  "value": 99
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 0,
+          "y": 2
+        },
+        "id": 2,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "13.0.1+security-01",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_DS_UID__"
+            },
+            "expr": "max(avg_over_time(up{job=\"integrations/unix\",host=\"$host\"}[$__range])) * 100",
+            "refId": "A"
+          }
+        ],
+        "title": "Availability",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_DS_UID__"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 1,
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 70
+                },
+                {
+                  "color": "red",
+                  "value": 90
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 4,
+          "y": 2
+        },
+        "id": 3,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "13.0.1+security-01",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_DS_UID__"
+            },
+            "expr": "100 - (avg(rate(node_cpu_seconds_total{host=\"$host\",job=\"integrations/unix\",mode=\"idle\"}[5m])) * 100)",
+            "refId": "A"
+          }
+        ],
+        "title": "CPU",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_DS_UID__"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 1,
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 70
+                },
+                {
+                  "color": "red",
+                  "value": 90
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 8,
+          "y": 2
+        },
+        "id": 4,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "13.0.1+security-01",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_DS_UID__"
+            },
+            "expr": "(1 - (node_memory_MemAvailable_bytes{host=\"$host\",job=\"integrations/unix\"} / node_memory_MemTotal_bytes{host=\"$host\",job=\"integrations/unix\"})) * 100",
+            "refId": "A"
+          }
+        ],
+        "title": "Memory",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_DS_UID__"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 1,
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 70
+                },
+                {
+                  "color": "red",
+                  "value": 90
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 12,
+          "y": 2
+        },
+        "id": 5,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "13.0.1+security-01",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_DS_UID__"
+            },
+            "expr": "100 - ((node_filesystem_avail_bytes{host=\"$host\",job=\"integrations/unix\",mountpoint=\"/\",fstype!=\"tmpfs\"} / node_filesystem_size_bytes{host=\"$host\",job=\"integrations/unix\",mountpoint=\"/\",fstype!=\"tmpfs\"}) * 100)",
+            "refId": "A"
+          }
+        ],
+        "title": "Disk /",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_DS_UID__"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "green",
+              "mode": "fixed"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 3,
+          "x": 16,
+          "y": 2
+        },
+        "id": 23,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "13.0.1+security-01",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_DS_UID__"
+            },
+            "expr": "count(probe_success{host=\"$host\",job=\"blackbox\"} == 1) or on() vector(0)",
+            "refId": "A"
+          }
+        ],
+        "title": "Ports Up",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_DS_UID__"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "red",
+              "mode": "fixed"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 3,
+          "x": 19,
+          "y": 2
+        },
+        "id": 24,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "13.0.1+security-01",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_DS_UID__"
+            },
+            "expr": "count(probe_success{host=\"$host\",job=\"blackbox\"} == 0) or on() vector(0)",
+            "refId": "A"
+          }
+        ],
+        "title": "Ports Down",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_DS_UID__"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "text",
+              "mode": "fixed"
+            },
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "dtdurations"
+          }
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 6,
+          "x": 0,
+          "y": 6
+        },
+        "id": 31,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "13.0.1+security-01",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_DS_UID__"
+            },
+            "expr": "time() - node_boot_time_seconds{host=\"$host\",job=\"integrations/unix\"}",
+            "instant": true,
+            "legendFormat": "Uptime",
+            "refId": "A"
+          }
+        ],
+        "title": "Uptime",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_DS_UID__"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "text",
+              "mode": "fixed"
+            },
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 6,
+          "x": 6,
+          "y": 6
+        },
+        "id": 32,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "13.0.1+security-01",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_DS_UID__"
+            },
+            "expr": "count(count by (cpu) (node_cpu_seconds_total{host=\"$host\",job=\"integrations/unix\",mode=\"idle\"}))",
+            "instant": true,
+            "legendFormat": "CPU Cores",
+            "refId": "A"
+          }
+        ],
+        "title": "CPU Cores",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_DS_UID__"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "text",
+              "mode": "fixed"
+            },
+            "decimals": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "decbytes"
+          }
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 6,
+          "x": 12,
+          "y": 6
+        },
+        "id": 33,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "13.0.1+security-01",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_DS_UID__"
+            },
+            "expr": "node_memory_MemTotal_bytes{host=\"$host\",job=\"integrations/unix\"}",
+            "instant": true,
+            "legendFormat": "RAM",
+            "refId": "A"
+          }
+        ],
+        "title": "RAM",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_DS_UID__"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "text",
+              "mode": "fixed"
+            },
+            "decimals": 2,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 6,
+          "x": 18,
+          "y": 6
+        },
+        "id": 34,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "13.0.1+security-01",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_DS_UID__"
+            },
+            "expr": "node_load1{host=\"$host\",job=\"integrations/unix\"}",
+            "instant": true,
+            "legendFormat": "Load 1m",
+            "refId": "A"
+          }
+        ],
+        "title": "Load 1m",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_DS_UID__"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "footer": {
+                "reducers": []
+              },
+              "inspect": false
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 24,
+          "x": 0,
+          "y": 9
+        },
+        "id": 30,
+        "options": {
+          "cellHeight": "sm",
+          "frameIndex": 0,
+          "showHeader": true
+        },
+        "pluginVersion": "13.0.1+security-01",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_DS_UID__"
+            },
+            "expr": "node_uname_info{host=\"$host\",job=\"integrations/unix\"}",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Server Details",
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "Value": true,
+                "__name__": true,
+                "domainname": true,
+                "env": true,
+                "host": true,
+                "instance": true,
+                "job": true,
+                "version": true
+              },
+              "renameByName": {
+                "machine": "Arch",
+                "nodename": "Hostname",
+                "release": "Kernel",
+                "sysname": "OS",
+                "port": "Port"
+              }
+            }
+          }
+        ],
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_DS_UID__"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "footer": {
+                "reducers": []
+              },
+              "inspect": false
+            },
+            "mappings": [
+              {
+                "options": {
+                  "0": {
+                    "color": "red",
+                    "text": "\u274c DOWN"
+                  },
+                  "1": {
+                    "color": "green",
+                    "text": "\u2705 UP"
+                  }
+                },
+                "type": "value"
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 12,
+          "x": 0,
+          "y": 13
+        },
+        "id": 40,
+        "options": {
+          "cellHeight": "sm",
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": false,
+              "displayName": "Status"
+            }
+          ]
+        },
+        "pluginVersion": "13.0.1+security-01",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_DS_UID__"
+            },
+            "expr": "probe_success{host=\"$host\",job=\"blackbox\"}",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Monitored Ports",
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "__name__": true,
+                "env": true,
+                "host": true,
+                "instance": true,
+                "job": true
+              },
+              "renameByName": {
+                "Value": "Status",
+                "port": "Port"
+              }
+            }
+          }
+        ],
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_DS_UID__"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "footer": {
+                "reducers": []
+              },
+              "inspect": false
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "CPU %"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "decimals",
+                  "value": 2
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Memory"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "decbytes"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 12,
+          "x": 12,
+          "y": 13
+        },
+        "id": 41,
+        "options": {
+          "cellHeight": "sm",
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "CPU %"
+            }
+          ]
+        },
+        "pluginVersion": "13.0.1+security-01",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_DS_UID__"
+            },
+            "expr": "sum by (groupname) (rate(namedprocess_namegroup_cpu_seconds_total{host=\"$host\"}[5m])) * 100",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_DS_UID__"
+            },
+            "expr": "sum by (groupname) (namedprocess_namegroup_memory_bytes{host=\"$host\",memtype=\"resident\"})",
+            "format": "table",
+            "instant": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Top Processes",
+        "transformations": [
+          {
+            "id": "seriesToColumns",
+            "options": {
+              "byField": "groupname"
+            }
+          },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "Time 1": true,
+                "Time 2": true,
+                "job": true
+              },
+              "renameByName": {
+                "Value #A": "CPU %",
+                "Value #B": "Memory",
+                "groupname": "Process",
+                "port": "Port"
+              }
+            }
+          }
+        ],
+        "type": "table"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 23
+        },
+        "id": 90,
+        "panels": [
+          {
+            "gridPos": {
+              "h": 10,
+              "w": 24,
+              "x": 0,
+              "y": 24
+            },
+            "id": 91,
+            "options": {
+              "content": "<iframe src=\"__MONITOR_API_PUBLIC_URL__/nodes-only?host=${host}\" style=\"width:100%;height:220px;border:none;border-radius:8px;\"></iframe>",
+              "mode": "html"
+            },
+            "title": "",
+            "transparent": true,
+            "type": "text"
+          }
+        ],
+        "title": "Client \u00b7 Account \u00b7 Display Name \u2014 edit here",
+        "type": "row"
+      }
+    ],
+    "preload": false,
+    "refresh": "30s",
+    "schemaVersion": 42,
+    "tags": [
+      "server",
+      "drilldown",
+      "alloy"
+    ],
+    "templating": {
+      "list": [
+        {
+          "allValue": ".*",
+          "current": {
+            "text": "All",
+            "value": "$__all"
+          },
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "__INFINITY_DS_UID__"
+          },
+          "definition": "url|/api/v1/variables/clients|json|$.__text|$.__value",
+          "includeAll": true,
+          "label": "Client",
+          "name": "client",
+          "query": {
+            "infinityQuery": {
+              "refId": "variable",
+              "source": "url",
+              "type": "json",
+              "url": "/api/v1/variables/clients"
+            },
+            "queryType": "infinity",
+            "type": "infinity"
+          },
+          "refresh": 1,
+          "sort": 0,
+          "type": "query"
+        },
+        {
+          "allValue": ".*",
+          "current": {
+            "text": "All",
+            "value": "$__all"
+          },
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "__INFINITY_DS_UID__"
+          },
+          "definition": "url|/api/v1/variables/accounts?client=${client}|json|$.__text|$.__value",
+          "includeAll": true,
+          "label": "Account",
+          "name": "account",
+          "query": {
+            "infinityQuery": {
+              "refId": "variable",
+              "source": "url",
+              "type": "json",
+              "url": "/api/v1/variables/accounts?client=${client}"
+            },
+            "queryType": "infinity",
+            "type": "infinity"
+          },
+          "refresh": 1,
+          "sort": 0,
+          "type": "query"
+        },
+        {
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "__INFINITY_DS_UID__"
+          },
+          "includeAll": false,
+          "label": "Host",
+          "name": "host",
+          "query": {
+            "infinityQuery": {
+              "refId": "variable",
+              "source": "url",
+              "type": "json",
+              "url": "/api/v1/variables/hosts?client=${client}&account=${account}"
+            },
+            "queryType": "infinity",
+            "type": "infinity"
+          },
+          "refresh": 1,
+          "sort": 0,
+          "type": "query"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": [
+        "5s",
+        "10s",
+        "30s",
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "1d"
+      ]
+    },
+    "timezone": "browser",
+    "title": "Server Drill-Down (Alloy)",
+    "uid": "alloy-drilldown",
+    "version": 15
+  },
+  "folderUid": "monitoring",
+  "overwrite": true
+}
