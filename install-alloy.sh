@@ -269,7 +269,7 @@ prometheus.relabel "blackbox_labels" {
     source_labels = ["job"]
     regex         = "(?:integrations/blackbox/)?(.+)"
     target_label  = "port"
-    replacement   = "$1"
+    replacement   = "\$1"
   }
   rule {
     target_label = "job"

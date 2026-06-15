@@ -184,6 +184,8 @@ def _build_client_drilldowns(client, prom_uid, inf_uid):
         obj = json.loads(raw)
         d = obj["dashboard"]
         d["templating"] = {"list": _client_drilldown_vars(client, inf_uid, with_port=(suffix == "dd-port"))}
+        # client viewers are read-only: strip the embedded server-editor row (id 90)
+        d["panels"] = [p for p in d.get("panels", []) if p.get("id") != 90]
         d.pop("id", None)
         obj.pop("folderUid", None)
         obj["overwrite"] = True
