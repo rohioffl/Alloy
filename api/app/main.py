@@ -232,6 +232,32 @@ async def health():
     return J({"status": "ok"})
 
 
+def _esc_label(v):
+    return str(v or "").replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus exposition of authoritative node metadata, so alerts can be
+    enriched with display name / IP / client / account via a group_left join."""
+    lines = [
+        "# HELP monitor_node_info Authoritative node metadata from the central monitoring API",
+        "# TYPE monitor_node_info gauge",
+    ]
+    for n in st.sync_prom_hosts():
+        host = _esc_label(n.get("hostname"))
+        labels = (
+            f'host="{host}",hostname="{host}",'
+            f'name="{_esc_label(n.get("name") or n.get("hostname"))}",'
+            f'ip="{_esc_label(n.get("ip"))}",'
+            f'client="{_esc_label(st.node_client(n))}",'
+            f'account="{_esc_label(st.node_account(n))}"'
+        )
+        lines.append(f"monitor_node_info{{{labels}}} 1")
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse("\n".join(lines) + "\n")
+
+
 @app.get("/api/v1/docs")
 async def docs():
     out = dict(API_DOCS)

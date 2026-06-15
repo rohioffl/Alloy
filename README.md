@@ -283,6 +283,17 @@ and are fully editable in Grafana's native Alerting UI (`/alerting/list`):
 The main **Fleet Overview** dashboard has an "Active Alerts" panel for an
 at-a-glance view.
 
+### Rich alert info (name / IP / client / account)
+
+The API publishes authoritative node metadata at `:9099/metrics` as
+`monitor_node_info{host,hostname,name,ip,client,account}`, scraped by Prometheus
+(job `monitor-api`). Every alert rule joins it via
+`... * on(host) group_left(ip,name,client,account) monitor_node_info`, so alert
+emails always show the server's **display name, IP, client, and account** —
+sourced from the central API, independent of (and overriding) any drift in the
+node-side metric labels. Alert annotations render a full block:
+`Server / Host / IP / Client / Account`.
+
 ### Per-client alert recipients
 
 Set from **All Servers → Clients & Accounts → Alert recipient email**. Each

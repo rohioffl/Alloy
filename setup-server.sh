@@ -160,6 +160,20 @@ sleep 2
 systemctl is-active --quiet port-monitor-api || die "API failed: journalctl -u port-monitor-api -n 20"
 ok "Central Monitoring API (FastAPI) on :9099"
 
+# ---- Step 2c: scrape API node-metadata so alerts carry name/ip/client/account
+if [ -f /etc/prometheus/prometheus.yml ] && ! grep -q "job_name: monitor-api" /etc/prometheus/prometheus.yml; then
+  cat >> /etc/prometheus/prometheus.yml << 'PROMEOF'
+
+  - job_name: monitor-api
+    static_configs:
+      - targets: ['127.0.0.1:9099']
+    metrics_path: /metrics
+    scrape_interval: 30s
+PROMEOF
+  curl -s -X POST http://127.0.0.1:9090/-/reload >/dev/null 2>&1 || systemctl reload prometheus 2>/dev/null || true
+  ok "Prometheus scrapes monitor-api (alert enrichment)"
+fi
+
 # ---- Step 2b: Alloy on central host (metrics for this server) ----------------
 log "Step 2b: Installing Alloy on central host..."
 

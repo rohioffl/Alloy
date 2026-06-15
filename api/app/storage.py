@@ -159,11 +159,20 @@ def ensure_server(host, create=False, defaults=None):
 # ---- prometheus --------------------------------------------------------------
 
 def prom_hosts():
+    """Hosts that are actually running a node agent (up{job=integrations/unix}).
+
+    Deliberately derived from real node metrics, NOT the global `host` label
+    values — otherwise the monitor_node_info metadata metric (which we generate
+    from the registry) would re-register hosts forever in a feedback loop.
+    """
     try:
         import urllib.request
-
-        with urllib.request.urlopen(f"{PROMETHEUS_URL}/api/v1/label/host/values", timeout=2) as r:
-            return json.loads(r.read()).get("data", [])
+        import urllib.parse
+        q = urllib.parse.quote('up{job="integrations/unix"}')
+        with urllib.request.urlopen(f"{PROMETHEUS_URL}/api/v1/query?query={q}", timeout=3) as r:
+            result = json.loads(r.read()).get("data", {}).get("result", [])
+        hosts = {s.get("metric", {}).get("host") for s in result}
+        return sorted(h for h in hosts if h)
     except Exception:
         return []
 
