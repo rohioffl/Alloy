@@ -1,0 +1,12 @@
+.git
+.agents
+.codex
+.cursor
+.kiro
+.vscode
+api/.venv
+**/__pycache__
+**/*.pyc
+*.png
+Dockerfile
+docker-compose.yml

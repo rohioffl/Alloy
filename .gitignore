@@ -1,0 +1,18 @@
+.kiro/
+.cursor
+
+# FastAPI service local env
+api/.venv/
+**/__pycache__/
+*.pyc
+alert/
+
+# Environment files
+.env
+.env.local
+
+# Docker override
+docker-compose.override.yml
+
+# Docker volumes backup
+*.tar.gz

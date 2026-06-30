@@ -1,0 +1,206 @@
+╔══════════════════════════════════════════════════════════════════════════╗
+║                                                                          ║
+║           🎨 GRAFANA BRANDING - REPLACE NAME & LOGO 🎨                  ║
+║                                                                          ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+✅ YOUR LOGO FILES (Ready to Use!)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  alert/logo.png             (238 KB, 822x398) - Full logo
+  alert/logo-email.png       (74 KB, 520x158)  - Small logo
+
+  ✅ Already configured in Dockerfile.grafana!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 QUICK DEPLOY WITH CUSTOM BRANDING (One Command!)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  # Deploy with default name "Alloy Monitoring"
+  ./scripts/deploy-with-branding.sh
+
+  # Deploy with custom organization name
+  ./scripts/deploy-with-branding.sh "Your Company Monitoring"
+
+  What it does:
+    1. ✅ Builds custom Grafana with your logo
+    2. ✅ Starts all services (Prometheus, Grafana, API, Uptime Kuma)
+    3. ✅ Updates organization name
+    4. ✅ Your logo appears everywhere!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 MANUAL STEPS (If You Want More Control)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Step 1: Create .env file (if not exists)
+  ────────────────────────────────────────
+    cp .env.example .env
+    echo "MONITOR_INSTALL_TOKEN=$(openssl rand -hex 32)" >> .env
+    echo "MONITOR_API_KEY=$(openssl rand -hex 32)" >> .env
+    nano .env  # Update passwords and URLs
+
+  Step 2: Build Grafana with custom logo
+  ───────────────────────────────────────
+    docker compose -f docker-compose.full.yml build grafana
+
+  Step 3: Start services
+  ──────────────────────
+    docker compose -f docker-compose.full.yml up -d
+
+  Step 4: Update organization name
+  ─────────────────────────────────
+    curl -X PUT -u admin:admin http://localhost:3000/api/org \
+      -H "Content-Type: application/json" \
+      -d '{"name":"Alloy Monitoring"}'
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📍 WHERE YOUR LOGO APPEARS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ✅ Login page (large logo)
+  ✅ Top-left header (text logo)
+  ✅ Sidebar (icon)
+  ✅ Browser tab (favicon)
+  ✅ Mobile home screen icon
+
+  All automatically replaced during Docker build!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔄 HOW IT WORKS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. Dockerfile.grafana copies your logo files
+  2. ImageMagick converts PNG → SVG and resizes
+  3. Replaces Grafana's default logos
+  4. Builds custom image: alloy-monitoring/grafana:13.0.1
+  5. docker-compose.full.yml uses this custom image
+
+  Your logos are baked INTO the image!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ VERIFY BRANDING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. Open http://localhost:3000
+  2. Check login page - should show YOUR logo
+  3. Login (admin / password from .env)
+  4. Check top-left header - should show YOUR logo
+  5. Check browser tab - should show YOUR icon
+  6. Check organization name - should be "Alloy Monitoring" (or custom)
+
+  If you see old Grafana logo:
+    - Hard refresh: Ctrl + Shift + R (Windows/Linux)
+    - Hard refresh: Cmd + Shift + R (Mac)
+    - Or clear browser cache
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎨 USING DIFFERENT LOGOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Want to use different logo files?
+
+  1. Replace logo files:
+     cp your-logo.png alert/logo.png
+     cp your-small-logo.png alert/logo-email.png
+
+  2. Rebuild Grafana:
+     docker compose -f docker-compose.full.yml build grafana
+
+  3. Restart:
+     docker compose -f docker-compose.full.yml up -d grafana
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌍 REPLICATION TO OTHER SERVERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  When you replicate to another server:
+
+  # Method 1: Replicate script (includes logos!)
+  ./scripts/replicate-to-server.sh ubuntu@new-server 192.168.1.100
+
+  # Method 2: Git clone
+  git clone https://github.com/yourorg/monitoring.git
+  cd monitoring
+  ./scripts/deploy-with-branding.sh "Your Company"
+
+  Result: Same branding on all servers! ✅
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Problem: Logo doesn't appear
+  ─────────────────────────────
+    1. Check image built correctly:
+       docker images | grep alloy-monitoring/grafana
+
+    2. Check container is using custom image:
+       docker ps | grep grafana
+
+    3. Rebuild and restart:
+       docker compose -f docker-compose.full.yml build grafana
+       docker compose -f docker-compose.full.yml up -d grafana
+
+  Problem: Old Grafana logo still shows
+  ──────────────────────────────────────
+    1. Hard refresh browser: Ctrl+Shift+R
+    2. Clear browser cache completely
+    3. Try incognito/private mode
+
+  Problem: Organization name not updated
+  ──────────────────────────────────────
+    Run manually:
+    curl -X PUT -u admin:PASSWORD http://localhost:3000/api/org \
+      -H "Content-Type: application/json" \
+      -d '{"name":"Your Name"}'
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 FILES CREATED FOR BRANDING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ✅ Dockerfile.grafana                 Custom Grafana with logos
+  ✅ scripts/deploy-with-branding.sh    Deploy with branding
+  ✅ scripts/apply-branding.sh          Apply branding to running instance
+  ✅ docker-compose.full.yml (updated)  Uses custom Grafana image
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 QUICK COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Deploy with branding:
+    ./scripts/deploy-with-branding.sh "Your Company Name"
+
+  Just change organization name (if already deployed):
+    ./scripts/apply-branding.sh "New Company Name"
+
+  Rebuild Grafana with new logos:
+    docker compose -f docker-compose.full.yml build grafana
+    docker compose -f docker-compose.full.yml up -d grafana
+
+  Check what's running:
+    docker ps
+
+  View logs:
+    docker compose -f docker-compose.full.yml logs -f grafana
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 FULL DOCUMENTATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  docs/GRAFANA_BRANDING_GUIDE.md     Branding guide
+  DOCKER_DEPLOYMENT.md                Docker deploy and replication guide
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Ready to brand? Run: ./scripts/deploy-with-branding.sh "Your Company"

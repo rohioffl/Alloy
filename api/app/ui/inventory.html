@@ -1,0 +1,1260 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>All Servers</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;background:#0b0c0e;color:#e0e0e0;padding:18px}
+h1{font-size:22px;color:#fff;margin-bottom:4px;letter-spacing:0}
+h2{font-size:16px;color:#fff;margin-bottom:4px}
+.sub{font-size:12px;color:#666;margin-bottom:14px}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+input,select{padding:8px 10px;border-radius:6px;border:1px solid #444;background:#1a1a2e;color:#fff;font-size:13px}
+input.search{min-width:200px}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px}
+th,td{text-align:left;padding:9px 11px;border-bottom:1px solid #222}
+th{color:#888;font-weight:500;font-size:11px;text-transform:uppercase}
+tr.data-row{cursor:pointer}tr.data-row:hover{background:#1a1a2e}
+tr.selected{background:#1f2937}
+.badge{font-size:10px;padding:2px 8px;border-radius:4px;background:#333;color:#aaa}
+.badge-unassigned{background:#422006;color:#fbbf24}
+.badge-up{background:#052e16;color:#86efac}
+.badge-down{background:#450a0a;color:#fca5a5}
+.badge-nodata{background:#27272a;color:#a1a1aa}
+.layout{display:grid;grid-template-columns:1fr 340px;gap:16px}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+.panel{background:#111318;border:1px solid #222;border-radius:8px;padding:14px}
+.panel h3{font-size:13px;color:#fff;margin-bottom:12px}
+label{font-size:11px;color:#888;display:block;margin-bottom:4px}
+.field{margin-bottom:10px}
+.field input,.field select{width:100%}
+.btn{padding:8px 16px;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px}
+.btn-primary{background:#22c55e;color:#fff}
+.btn-secondary{background:#333;color:#ccc;margin-left:6px}
+.btn-warning{background:#854d0e;color:#fff}
+.btn-silenced{background:#0f766e;color:#fff}
+#edit-status,#org-status{font-size:12px;margin-top:8px}
+.empty{color:#666;padding:24px;text-align:center}
+.mtabs{display:flex;gap:16px;margin-bottom:16px;border-bottom:1px solid #333;padding-bottom:8px}
+.mtab{color:#888;cursor:pointer;font-size:14px;padding:4px 0}.mtab.active{color:#fff;border-bottom:2px solid #f59e0b;font-weight:600}
+.org-grid{display:grid;grid-template-columns:220px 1fr;gap:16px}
+.org-list{list-style:none;max-height:420px;overflow:auto}
+.org-list li{padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
+.org-list li:hover,.org-list li.active{background:#1f2937}
+.org-list .cnt{font-size:10px;color:#666}
+.btn-sm{padding:5px 10px;font-size:11px;margin-right:6px;margin-top:6px}
+.btn-danger{background:#ef4444;color:#fff}
+input[readonly]{opacity:.75;cursor:not-allowed}
+.hint-ip{font-size:10px;color:#666;margin-top:2px}
+.rule-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.rule-card{background:#111318;border:1px solid #222;border-radius:8px;padding:14px}
+.rule-card h4{font-size:13px;color:#fff;margin-bottom:4px}
+.rule-card p{font-size:11px;color:#777;margin-bottom:10px}
+.rule-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.rule-row .field{margin-bottom:0;flex:1;min-width:110px}
+.hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:14px;flex-wrap:wrap}
+.hero-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0}
+.kpi{background:#111318;border:1px solid #222;border-radius:8px;padding:14px;min-height:88px}
+.kpi .label{font-size:11px;color:#888;text-transform:uppercase;margin-bottom:8px}
+.kpi .value{font-size:26px;color:#fff;font-weight:700;line-height:1}
+.kpi .note{font-size:11px;color:#777;margin-top:8px}
+.kpi.good{border-color:#164e2c}.kpi.warn{border-color:#854d0e}.kpi.bad{border-color:#7f1d1d}.kpi.neutral{border-color:#1f2937}
+.command-grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px}
+@media(max-width:1050px){.command-grid{grid-template-columns:1fr}}
+.health-list{display:grid;gap:8px}
+.health-item{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:#0d0f14;border:1px solid #222;border-radius:8px;padding:10px}
+.health-main{min-width:0}.health-main strong{font-size:13px;color:#fff}.health-main .meta{font-size:11px;color:#777;margin-top:3px}
+.health-counts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.pill{font-size:10px;padding:3px 7px;border-radius:999px;background:#27272a;color:#a1a1aa;white-space:nowrap}
+.pill-ok{background:#052e16;color:#86efac}.pill-warning{background:#422006;color:#fbbf24}.pill-critical{background:#450a0a;color:#fca5a5}.pill-unknown{background:#27272a;color:#a1a1aa}
+.asset-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.asset-tools input,.asset-tools select{min-width:150px}
+.link-btn{color:#93c5fd;text-decoration:none;font-size:12px}
+.threshold-mini{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px}
+.threshold-mini div{background:#0d0f14;border:1px solid #222;border-radius:6px;padding:8px}
+.threshold-mini strong{display:block;color:#fff;margin-top:3px}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.68);display:none;align-items:center;justify-content:center;z-index:9999;padding:18px}
+.modal{width:min(560px,100%);background:#111318;border:1px solid #2a3545;border-radius:8px;padding:18px;box-shadow:0 24px 80px rgba(0,0,0,.55)}
+.modal-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px}
+.modal h3{font-size:16px;color:#fff;margin:0 0 4px}.modal .x{border:0;background:transparent;color:#94a3b8;font-size:22px;cursor:pointer;line-height:1}
+.silence-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin:12px 0}
+.silence-current{background:#0d0f14;border:1px solid #263244;border-radius:7px;padding:10px;font-size:12px;color:#cbd5e1;margin-bottom:10px}
+.silence-current strong{color:#fff}.silence-status{font-size:12px;color:#8bdcff;min-height:18px;margin-top:8px}
+</style></head><body>
+<div class="modal-backdrop" id="silence-modal" onclick="closeSilenceModal(event)">
+<div class="modal" onclick="event.stopPropagation()">
+<div class="modal-head"><div><h3 id="silence-title">Silence notifications</h3><p class="sub" id="silence-sub" style="margin:0"></p></div><button class="x" onclick="closeSilenceModal()">×</button></div>
+<div id="silence-current" class="silence-current"></div>
+<div class="silence-options">
+<button class="btn btn-secondary" onclick="createSilenceFromModal(60)">1 hour</button>
+<button class="btn btn-primary" onclick="createSilenceFromModal(240)">4 hours</button>
+<button class="btn btn-secondary" onclick="createSilenceFromModal(1440)">24 hours</button>
+<button class="btn btn-secondary" onclick="createSilenceFromModal(10080)">7 days</button>
+<button class="btn btn-warning" onclick="createSilenceFromModal(0,true)">Until turned off</button>
+</div>
+<button class="btn btn-danger" id="silence-clear" onclick="clearSilenceFromModal()" style="display:none">Turn off silence</button>
+<div class="silence-status" id="silence-status"></div>
+</div>
+</div>
+<div class="hero">
+<div>
+<h1>Monitoring Command Center</h1>
+<p class="sub">Unified view for servers, Uptime Kuma sites, clients, accounts, and alert thresholds.</p>
+</div>
+<div class="hero-actions">
+<button class="btn btn-secondary" onclick="loadCommandCenter()">Refresh</button>
+<a class="btn btn-secondary" href="/d/alloy-fleet/fleet-overview-all-servers" target="_blank" style="text-decoration:none">Fleet Grafana</a>
+<a class="btn btn-secondary" href="/d/uptime-kuma-source/uptime-kuma" target="_blank" style="text-decoration:none">Kuma Grafana</a>
+</div>
+</div>
+<div class="mtabs">
+<span class="mtab active" data-v="command">Command Center</span>
+<span class="mtab" data-v="servers">Servers</span>
+<span class="mtab" data-v="kuma">Uptime Kuma Sites</span>
+<span class="mtab" data-v="alerts">Alert Rules</span>
+<span class="mtab" data-v="org">Clients &amp; Accounts</span>
+<span class="mtab" data-v="groups">Alert Groups</span>
+</div>
+<div id="view-command">
+<div class="toolbar">
+<input class="search" id="cmd-search" placeholder="Search asset, client, account..." oninput="renderCommandCenter()"/>
+<select id="cmd-type" onchange="renderCommandCenter()"><option value="">All types</option><option value="server">Servers</option><option value="site">Sites</option></select>
+<select id="cmd-status" onchange="renderCommandCenter()"><option value="">All status</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="unknown">Unknown</option><option value="ok">OK</option></select>
+<select id="cmd-client" onchange="renderCommandCenter()"><option value="">All clients</option></select>
+<select id="cmd-account" onchange="renderCommandCenter()"><option value="">All accounts</option></select>
+<span id="cmd-count" style="font-size:12px;color:#666;margin-left:8px"></span>
+</div>
+<div class="kpi-grid" id="cmd-kpis"></div>
+<div class="command-grid">
+<div class="panel">
+<h3>Unified Assets</h3>
+<p class="sub" style="margin-bottom:10px">Servers and Uptime Kuma sites in one operational list.</p>
+<table>
+<thead><tr><th>Asset</th><th>Type</th><th>Status</th><th>Client</th><th>Account</th><th>Signal</th><th>Actions</th></tr></thead>
+<tbody id="cmd-assets"></tbody>
+</table>
+<div id="cmd-empty" class="empty" style="display:none">No assets match these filters.</div>
+</div>
+<div>
+<div class="panel" style="margin-bottom:16px">
+<h3>Client Health</h3>
+<div id="cmd-client-health" class="health-list"></div>
+</div>
+<div class="panel">
+<h3>Alert Thresholds</h3>
+<p class="sub" style="margin-bottom:10px">Current warning and critical settings used by Grafana alert rules.</p>
+<div id="cmd-thresholds" class="threshold-mini"></div>
+<button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab('alerts')">Edit alert rules</button>
+</div>
+</div>
+</div>
+</div>
+<div id="view-servers" style="display:none">
+<p class="sub">From Alloy install. IP is fixed at install — re-run <code>install-alloy.sh</code> on the node to refresh it.</p>
+<div class="toolbar">
+<input class="search" id="search" placeholder="Search hostname or name..." oninput="render()"/>
+<select id="filter-client" onchange="render()"><option value="">All clients</option></select>
+<select id="filter-account" onchange="render()"><option value="">All accounts</option></select>
+<button class="btn btn-secondary" onclick="load()">Refresh</button>
+<span id="count" style="font-size:12px;color:#666;margin-left:8px"></span>
+</div>
+<div class="layout">
+<div>
+<table>
+<thead><tr><th>Hostname</th><th>Display name</th><th>Client</th><th>Account</th><th>IP</th><th>Ports</th><th>Actions</th></tr></thead>
+<tbody id="rows"></tbody>
+</table>
+<div id="empty" class="empty" style="display:none">No servers match. Install Alloy on a node or adjust filters.</div>
+</div>
+<div class="panel">
+<h3 id="edit-title">Edit server</h3>
+<p class="sub" style="margin-bottom:10px" id="edit-hint">Select a server from the list</p>
+<div id="edit-form" style="display:none">
+<div class="field"><label>Hostname</label><input id="e-host" readonly/></div>
+<div class="field"><label>Display name</label><input id="e-name" placeholder="e.g. Production API"/></div>
+<div class="field"><label>Client</label><select id="e-client-sel" onchange="onCombo('e-client-sel','e-client-new',refreshEditAccounts)"></select><input id="e-client-new" style="display:none;margin-top:6px" placeholder="New client name"/></div>
+<div class="field"><label>Account</label><select id="e-account-sel" onchange="onCombo('e-account-sel','e-account-new')"></select><input id="e-account-new" style="display:none;margin-top:6px" placeholder="New account name"/></div>
+<div class="field"><label>IP address</label><input id="e-ip" readonly/><p class="hint-ip">Detected at install (primary interface)</p></div>
+<div class="field"><label>Alert groups</label><div id="e-groups" style="max-height:140px;overflow:auto;border:1px solid #222;border-radius:6px;padding:8px;font-size:12px"></div></div>
+<button class="btn btn-primary" onclick="saveEdit()">Save</button>
+<div id="edit-status"></div>
+</div>
+</div>
+</div>
+</div>
+<div id="view-kuma" style="display:none">
+<p class="sub">From Uptime Kuma Prometheus metrics. Assign Client, Account, and Display Name here so site alerts route like server alerts.</p>
+<div class="toolbar">
+<input class="search" id="kuma-search" placeholder="Search site, URL, host..." oninput="renderKumaSites()"/>
+<select id="kuma-filter-client" onchange="renderKumaSites()"><option value="">All clients</option></select>
+<select id="kuma-filter-account" onchange="renderKumaSites()"><option value="">All accounts</option></select>
+<button class="btn btn-secondary" onclick="loadKumaSites()">Refresh</button>
+<a class="btn btn-secondary" href="/d/uptime-kuma-source/uptime-kuma" target="_blank" style="text-decoration:none">Open dashboard</a>
+<span id="kuma-count" style="font-size:12px;color:#666;margin-left:8px"></span>
+</div>
+<div class="layout">
+<div>
+<table>
+<thead><tr><th>Site</th><th>Display name</th><th>Status</th><th>Client</th><th>Account</th><th>Type</th><th>Target</th><th>Latency</th><th>Actions</th></tr></thead>
+<tbody id="kuma-rows"></tbody>
+</table>
+<div id="kuma-empty" class="empty" style="display:none">No Uptime Kuma sites found. Configure the Prometheus source job <code>uptime-kuma</code>, then refresh.</div>
+</div>
+<div class="panel">
+<h3 id="kuma-edit-title">Edit site</h3>
+<p class="sub" style="margin-bottom:10px" id="kuma-edit-hint">Select a Uptime Kuma site from the list</p>
+<div id="kuma-edit-form" style="display:none">
+<div class="field"><label>Uptime Kuma monitor</label><input id="kuma-e-monitor" readonly/></div>
+<div class="field"><label>Display name</label><input id="kuma-e-name" placeholder="e.g. Public website"/></div>
+<div class="field"><label>Client</label><select id="kuma-e-client-sel" onchange="onCombo('kuma-e-client-sel','kuma-e-client-new',refreshKumaEditAccounts)"></select><input id="kuma-e-client-new" style="display:none;margin-top:6px" placeholder="New client name"/></div>
+<div class="field"><label>Account</label><select id="kuma-e-account-sel" onchange="onCombo('kuma-e-account-sel','kuma-e-account-new')"></select><input id="kuma-e-account-new" style="display:none;margin-top:6px" placeholder="New account name"/></div>
+<div class="field"><label>Target</label><input id="kuma-e-target" readonly/></div>
+<div class="field"><label>Alert groups</label><div id="kuma-e-groups" style="max-height:140px;overflow:auto;border:1px solid #222;border-radius:6px;padding:8px;font-size:12px"></div></div>
+<button class="btn btn-primary" onclick="saveKumaSite()">Save</button>
+<a class="btn btn-secondary" id="kuma-open-dashboard" href="/d/uptime-kuma-site/uptime-kuma-site" target="_blank" style="text-decoration:none;display:inline-block">Open site dashboard</a>
+<div id="kuma-edit-status"></div>
+</div>
+</div>
+</div>
+</div>
+<div id="view-alerts" style="display:none">
+<p class="sub">Edit the built-in alert thresholds and durations here. Saving updates the stored settings and immediately resyncs Grafana alert rules.</p>
+<div class="toolbar">
+<button class="btn btn-secondary" onclick="loadAlertSettings()">Refresh</button>
+<button class="btn btn-primary" onclick="saveAlertSettings()">Save alert rules</button>
+<span id="alert-settings-status" style="font-size:12px;color:#666;margin-left:8px"></span>
+</div>
+<div class="rule-grid">
+<div class="rule-card">
+<h4>Node Down</h4><p>Alert when a monitored server stops sending node metrics.</p>
+<div class="rule-row"><label style="display:flex;align-items:center;gap:6px;color:#aaa"><input type="checkbox" id="rule-node_down-enabled"/> enabled</label></div>
+<div class="rule-row">
+<div class="field"><label>Duration (min)</label><input id="rule-node_down-duration" type="number" min="1" max="1440"/></div>
+<div class="field"><label>Severity</label><select id="rule-node_down-severity"><option value="critical">Critical</option><option value="warning">Warning</option><option value="info">Info</option></select></div>
+</div>
+</div>
+<div class="rule-card">
+<h4>Port Down</h4><p>Alert when a configured blackbox probe fails.</p>
+<div class="rule-row"><label style="display:flex;align-items:center;gap:6px;color:#aaa"><input type="checkbox" id="rule-port_down-enabled"/> enabled</label></div>
+<div class="rule-row">
+<div class="field"><label>Duration (min)</label><input id="rule-port_down-duration" type="number" min="1" max="1440"/></div>
+<div class="field"><label>Severity</label><select id="rule-port_down-severity"><option value="critical">Critical</option><option value="warning">Warning</option><option value="info">Info</option></select></div>
+</div>
+</div>
+<div class="rule-card">
+<h4>Process Down</h4><p>Alert when a stable monitored process disappears.</p>
+<div class="rule-row"><label style="display:flex;align-items:center;gap:6px;color:#aaa"><input type="checkbox" id="rule-process_down-enabled"/> enabled</label></div>
+<div class="rule-row">
+<div class="field"><label>Duration (min)</label><input id="rule-process_down-duration" type="number" min="1" max="1440"/></div>
+<div class="field"><label>Severity</label><select id="rule-process_down-severity"><option value="critical">Critical</option><option value="warning">Warning</option><option value="info">Info</option></select></div>
+</div>
+</div>
+<div class="rule-card">
+<h4>Uptime Kuma Source Down</h4><p>Alert when Prometheus cannot scrape the Kuma metrics endpoint.</p>
+<div class="rule-row"><label style="display:flex;align-items:center;gap:6px;color:#aaa"><input type="checkbox" id="rule-uptime_kuma_source_down-enabled"/> enabled</label></div>
+<div class="rule-row">
+<div class="field"><label>Duration (min)</label><input id="rule-uptime_kuma_source_down-duration" type="number" min="1" max="1440"/></div>
+<div class="field"><label>Severity</label><select id="rule-uptime_kuma_source_down-severity"><option value="critical">Critical</option><option value="warning">Warning</option><option value="info">Info</option></select></div>
+</div>
+</div>
+<div class="rule-card">
+<h4>Uptime Kuma Monitor Down</h4><p>Alert when a Kuma monitor reports status down.</p>
+<div class="rule-row"><label style="display:flex;align-items:center;gap:6px;color:#aaa"><input type="checkbox" id="rule-uptime_kuma_monitor_down-enabled"/> enabled</label></div>
+<div class="rule-row">
+<div class="field"><label>Duration (min)</label><input id="rule-uptime_kuma_monitor_down-duration" type="number" min="1" max="1440"/></div>
+<div class="field"><label>Severity</label><select id="rule-uptime_kuma_monitor_down-severity"><option value="critical">Critical</option><option value="warning">Warning</option><option value="info">Info</option></select></div>
+</div>
+</div>
+<div class="rule-card">
+<h4>High CPU Usage</h4><p>Create both warning and critical alerts for CPU usage.</p>
+<div class="rule-row"><label style="display:flex;align-items:center;gap:6px;color:#aaa"><input type="checkbox" id="rule-high_cpu-enabled"/> enabled</label></div>
+<div class="rule-row">
+<div class="field"><label>Warning (%)</label><input id="rule-high_cpu-warning" type="number" min="0" max="100" step="0.1"/></div>
+<div class="field"><label>Critical (%)</label><input id="rule-high_cpu-critical" type="number" min="0" max="100" step="0.1"/></div>
+<div class="field"><label>Duration (min)</label><input id="rule-high_cpu-duration" type="number" min="1" max="1440"/></div>
+</div>
+</div>
+<div class="rule-card">
+<h4>High Memory Usage</h4><p>Create both warning and critical alerts for memory usage.</p>
+<div class="rule-row"><label style="display:flex;align-items:center;gap:6px;color:#aaa"><input type="checkbox" id="rule-high_memory-enabled"/> enabled</label></div>
+<div class="rule-row">
+<div class="field"><label>Warning (%)</label><input id="rule-high_memory-warning" type="number" min="0" max="100" step="0.1"/></div>
+<div class="field"><label>Critical (%)</label><input id="rule-high_memory-critical" type="number" min="0" max="100" step="0.1"/></div>
+<div class="field"><label>Duration (min)</label><input id="rule-high_memory-duration" type="number" min="1" max="1440"/></div>
+</div>
+</div>
+<div class="rule-card">
+<h4>Low Disk Space</h4><p>Create both warning and critical alerts for root filesystem usage.</p>
+<div class="rule-row"><label style="display:flex;align-items:center;gap:6px;color:#aaa"><input type="checkbox" id="rule-low_disk-enabled"/> enabled</label></div>
+<div class="rule-row">
+<div class="field"><label>Warning (%)</label><input id="rule-low_disk-warning" type="number" min="0" max="100" step="0.1"/></div>
+<div class="field"><label>Critical (%)</label><input id="rule-low_disk-critical" type="number" min="0" max="100" step="0.1"/></div>
+<div class="field"><label>Duration (min)</label><input id="rule-low_disk-duration" type="number" min="1" max="1440"/></div>
+</div>
+</div>
+<div class="rule-card">
+<h4>Network Errors / Drops</h4><p>Create warning and critical alerts for network interface errors and dropped packets per second.</p>
+<div class="rule-row"><label style="display:flex;align-items:center;gap:6px;color:#aaa"><input type="checkbox" id="rule-network_errors-enabled"/> enabled</label></div>
+<div class="rule-row">
+<div class="field"><label>Warning (/s)</label><input id="rule-network_errors-warning" type="number" min="0" max="100" step="0.1"/></div>
+<div class="field"><label>Critical (/s)</label><input id="rule-network_errors-critical" type="number" min="0" max="100" step="0.1"/></div>
+<div class="field"><label>Duration (min)</label><input id="rule-network_errors-duration" type="number" min="1" max="1440"/></div>
+</div>
+</div>
+</div>
+</div>
+<div id="view-org" style="display:none">
+<p class="sub">Manage the client → account hierarchy used in Grafana filters. Rename or merge to reassign all servers at once.</p>
+<div class="panel" style="margin-bottom:16px">
+<h3>Admin / fallback recipients</h3>
+<p class="sub" style="margin-bottom:10px">The global fallback contact point (<code>email-zentra</code>). Receives <b>every</b> alert. This is also your SMTP sender, so keep at least one address here.</p>
+<div id="org-adminalert"></div>
+</div>
+<div class="panel" style="margin-bottom:16px">
+<h3>All-clients alert recipients</h3>
+<p class="sub" style="margin-bottom:10px">These addresses receive <b>every</b> alert across all clients (in addition to the admin fallback). Use for a NOC / ops team.</p>
+<div id="org-allalert"></div>
+</div>
+<div class="org-grid">
+<div class="panel">
+<h3>Clients</h3>
+<button class="btn btn-primary btn-sm" onclick="orgAddClient()">+ New client</button>
+<ul class="org-list" id="org-clients"></ul>
+</div>
+<div class="panel">
+<h3 id="org-detail-title">Select a client</h3>
+<div id="org-detail" style="display:none">
+<div style="margin-bottom:12px">
+<button class="btn btn-secondary btn-sm" onclick="orgRenameClient()">Rename</button>
+<button class="btn btn-secondary btn-sm" onclick="orgMergeClient()">Merge into…</button>
+<button class="btn btn-danger btn-sm" onclick="orgDeleteClient()">Delete</button>
+</div>
+<h3 style="font-size:12px;color:#888;margin:12px 0 8px">Accounts</h3>
+<button class="btn btn-primary btn-sm" onclick="orgAddAccount()">+ New account</button>
+<table style="margin-top:10px"><thead><tr><th>Account</th><th>Servers</th><th></th></tr></thead><tbody id="org-accounts"></tbody></table>
+<h3 style="font-size:12px;color:#888;margin:18px 0 8px">Client portal (Grafana org)</h3>
+<div id="org-access" style="font-size:12px;background:#0d0f14;border:1px solid #222;border-radius:6px;padding:12px"></div>
+<h3 style="font-size:12px;color:#888;margin:18px 0 8px">Alert recipient email</h3>
+<div id="org-alert" style="font-size:12px;background:#0d0f14;border:1px solid #222;border-radius:6px;padding:12px"></div>
+</div>
+<div id="org-status"></div>
+</div>
+</div>
+</div>
+<div id="view-groups" style="display:none">
+<p class="sub">Create a group of servers (across any client/account) and route their alerts to a shared recipient list. A server can belong to multiple groups; each enabled recipient is added alongside admin and any per-client recipients.</p>
+<div class="org-grid">
+<div class="panel">
+<h3>Groups</h3>
+<button class="btn btn-primary btn-sm" onclick="newGroup()">+ New group</button>
+<div id="group-list" style="margin-top:10px"></div>
+</div>
+<div class="panel">
+<h3 id="group-editor-title">New alert group</h3>
+<div class="field"><label>Group name</label><input id="group-name" placeholder="e.g. Customer A Web Team"/></div>
+<label style="display:flex;align-items:center;gap:6px;color:#aaa;margin:6px 0"><input type="checkbox" id="group-enabled" checked/> enabled</label>
+<h3 style="font-size:12px;color:#888;margin:14px 0 6px">Servers in this group</h3>
+<div id="group-servers" style="max-height:220px;overflow:auto;border:1px solid #222;border-radius:6px;padding:8px"></div>
+<h3 style="font-size:12px;color:#888;margin:14px 0 6px">Uptime Kuma sites in this group</h3>
+<div id="group-sites" style="max-height:220px;overflow:auto;border:1px solid #222;border-radius:6px;padding:8px"></div>
+<h3 style="font-size:12px;color:#888;margin:14px 0 6px">Recipients</h3>
+<div id="group-recipients"></div>
+<button class="btn btn-secondary btn-sm" onclick="addGroupRecipient()">+ Add email</button>
+<div style="margin-top:14px">
+<button class="btn btn-primary btn-sm" onclick="saveGroup()">Save</button>
+<button class="btn btn-danger btn-sm" id="group-delete-btn" style="display:none" onclick="deleteGroup()">Delete</button>
+</div>
+<div id="group-status" style="margin-top:8px;font-size:12px"></div>
+</div>
+</div>
+</div>
+<script>
+__SCRIPT__
+__COMBO_JS__
+function switchTab(view){
+  const t=document.querySelector('.mtab[data-v="'+view+'"]');if(!t)return;
+  document.querySelectorAll('.mtab').forEach(x=>x.classList.toggle('active',x===t));
+  ['command','servers','kuma','alerts','org','groups'].forEach(v=>{
+    const el=document.getElementById('view-'+v);if(el)el.style.display=v===view?'block':'none';
+  });
+  if(view==='command')loadCommandCenter();
+  if(view==='servers')load();
+  if(view==='kuma')loadKumaSites();
+  if(view==='alerts')loadAlertSettings();
+  if(view==='org')loadOrg();
+  if(view==='groups')loadGroups();
+}
+document.querySelectorAll('.mtab').forEach(t=>t.onclick=()=>switchTab(t.dataset.v));
+let servers=[], selected=null, kumaSites=[], selectedKuma=null, orgData=null, orgClient=null, commandData=null;
+function kumaDashboardUrl(monitorName){
+  return '/d/uptime-kuma-site/uptime-kuma-site?var-monitor='+encodeURIComponent(monitorName);
+}
+function escHtml(v){
+  return String(v===undefined||v===null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function fmtNum(v,digits){
+  if(v===undefined||v===null||Number.isNaN(Number(v)))return '—';
+  return Number(v).toFixed(digits===undefined?1:digits);
+}
+function severityLabel(sev){
+  if(sev==='critical')return '<span class="pill pill-critical">Critical</span>';
+  if(sev==='warning')return '<span class="pill pill-warning">Warning</span>';
+  if(sev==='unknown')return '<span class="pill pill-unknown">Unknown</span>';
+  return '<span class="pill pill-ok">OK</span>';
+}
+let activeSilences=[], silenceContext=null;
+async function loadSilences(){
+  const d=await fetch(API+'/api/v1/silences').then(r=>r.json()).catch(()=>({silences:[]}));
+  activeSilences=(d.silences||[]).filter(s=>(s.status||{}).state==='active');
+}
+function matcherValue(s,name){
+  const m=(s.matchers||[]).find(x=>x.name===name&&x.isEqual!==false&&!x.isRegex);
+  return m?m.value:'';
+}
+function targetSilences(kind,id,alertname){
+  id=decodeURIComponent(id||'');
+  alertname=decodeURIComponent(alertname||'');
+  return activeSilences.filter(s=>{
+    if(kind==='site'){
+      if(matcherValue(s,'monitor_name')!==id)return false;
+      const an=matcherValue(s,'alertname');
+      return !an||an===(alertname||'Site Monitor Down');
+    }
+    return matcherValue(s,'host')===id;
+  });
+}
+function silenceIsUntilOff(s){
+  const comment=String(s.comment||'').toLowerCase();
+  if(comment.includes('until manually turned off'))return true;
+  const end=Date.parse(s.endsAt||'');
+  return end && end-Date.now() > 365*24*60*60*1000;
+}
+function silenceLabel(s){
+  if(!s)return '';
+  if(silenceIsUntilOff(s))return 'until turned off';
+  return 'until '+new Date(s.endsAt).toLocaleString();
+}
+function silenceButton(kind,id,alertname){
+  const matches=targetSilences(kind,id,alertname);
+  const silenced=matches.length>0;
+  const cls=silenced?'btn btn-silenced btn-sm silence-btn':'btn btn-warning btn-sm silence-btn';
+  const label=silenced?'Silenced':'Silence';
+  return '<button class="'+cls+'" data-kind="'+escHtml(kind||'')+'" data-id="'+escHtml(encodeURIComponent(id||''))+'" data-alertname="'+escHtml(encodeURIComponent(alertname||''))+'">'+label+'</button>';
+}
+function openSilenceModal(kind,id,alertname){
+  id=decodeURIComponent(id||'');
+  alertname=decodeURIComponent(alertname||'');
+  const label=kind==='site'?'site':'server';
+  const matches=targetSilences(kind,id,alertname);
+  silenceContext={kind,id,alertname,matches};
+  document.getElementById('silence-title').textContent=(matches.length?'Manage silence for ':'Silence notifications for ')+id;
+  document.getElementById('silence-sub').textContent=kind==='site'?'Site alert: '+(alertname||'Site Monitor Down'):'All alerts for this server';
+  document.getElementById('silence-current').innerHTML=matches.length
+    ? '<strong>Currently silenced</strong><br>'+matches.map(s=>escHtml(silenceLabel(s))).join('<br>')
+    : '<strong>Not silenced</strong><br>No active silence matches this '+label+'.';
+  document.getElementById('silence-clear').style.display=matches.length?'inline-block':'none';
+  document.getElementById('silence-status').textContent='';
+  document.getElementById('silence-modal').style.display='flex';
+}
+function closeSilenceModal(e){
+  if(e&&e.target&&e.target.id!=='silence-modal')return;
+  document.getElementById('silence-modal').style.display='none';
+}
+function silencePayloadFromContext(untilOff,minutes){
+  const c=silenceContext||{};
+  const body=untilOff?{until_off:true}:{duration_minutes:minutes};
+  if(c.kind==='site'){
+    body.alertname=c.alertname||'Site Monitor Down';
+    body.monitor_name=c.id;
+  }else{
+    body.host=c.id;
+  }
+  return body;
+}
+async function createSilenceFromModal(minutes,untilOff){
+  if(!silenceContext)return;
+  const st=document.getElementById('silence-status');
+  st.textContent='Creating silence...';
+  const d=await fetch(API+'/api/v1/silences',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(silencePayloadFromContext(!!untilOff,minutes))}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  if(d.error||!d.ok){st.textContent='Failed: '+(d.error||'unknown error');st.style.color='#fecdd3';return;}
+  st.style.color='#8bdcff';
+  st.textContent=d.until_off?'Silenced until turned off':'Silenced until '+new Date(d.endsAt).toLocaleString();
+  await loadSilences();
+  refreshVisibleRows();
+  openSilenceModal(silenceContext.kind,silenceContext.id,silenceContext.alertname);
+}
+async function clearSilenceFromModal(){
+  if(!silenceContext||!silenceContext.matches.length)return;
+  const st=document.getElementById('silence-status');
+  st.textContent='Turning off silence...';
+  for(const s of silenceContext.matches){
+    await fetch(API+'/api/v1/silences/'+encodeURIComponent(s.id),{method:'DELETE'}).catch(()=>{});
+  }
+  st.style.color='#8bdcff';
+  st.textContent='Silence turned off';
+  await loadSilences();
+  refreshVisibleRows();
+  openSilenceModal(silenceContext.kind,silenceContext.id,silenceContext.alertname);
+}
+function refreshVisibleRows(){
+  if(document.getElementById('view-command').style.display!=='none')renderCommandAssets();
+  if(document.getElementById('view-servers').style.display!=='none')render();
+  if(document.getElementById('view-kuma').style.display!=='none')renderKumaSites();
+}
+document.addEventListener('click',function(e){
+  const btn=e.target.closest&&e.target.closest('.silence-btn');
+  if(!btn)return;
+  e.preventDefault();
+  e.stopPropagation();
+  openSilenceModal(btn.dataset.kind||'',btn.dataset.id||'',btn.dataset.alertname||'');
+});
+function assetSignal(a){
+  if(a.type==='site'){
+    const rt=a.response_time===undefined||a.response_time===null?'—':Math.round(a.response_time)+' ms';
+    return 'Latency '+rt;
+  }
+  const diskUsed=a.disk_used_gb===undefined||a.disk_used_gb===null?null:Number(a.disk_used_gb);
+  const diskTotal=a.disk_total_gb===undefined||a.disk_total_gb===null?null:Number(a.disk_total_gb);
+  const diskText=(diskUsed!==null&&diskTotal!==null)
+    ? (fmtNum(diskUsed)+'/'+fmtNum(diskTotal)+' GB ('+fmtNum(a.disk)+'%)')
+    : (fmtNum(a.disk)+'%');
+  return 'CPU '+fmtNum(a.cpu)+'% · Mem '+fmtNum(a.memory)+'% · Disk '+diskText+' · Net '+fmtNum(a.network_error_rate)+'/s · Ports '+(a.ports_down||0)+' down · Proc '+(a.processes_down||0)+' down';
+}
+async function fillCommandFilters(){
+  const clients=await fetchClients();
+  const fc=document.getElementById('cmd-client');
+  const oldC=fc.value;fc.innerHTML='<option value="">All clients</option>';
+  clients.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;fc.appendChild(o);});
+  if(oldC)fc.value=oldC;
+  const accounts=await fetchAccounts(fc.value||'');
+  const fa=document.getElementById('cmd-account');
+  const oldA=fa.value;fa.innerHTML='<option value="">All accounts</option>';
+  accounts.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;fa.appendChild(o);});
+  if(oldA)fa.value=oldA;
+}
+async function loadCommandCenter(){
+  await loadSilences();
+  await fillCommandFilters();
+  const c=document.getElementById('cmd-client').value;
+  const a=document.getElementById('cmd-account').value;
+  const url=API+'/api/v1/command-center?client='+encodeURIComponent(c||'')+'&account='+encodeURIComponent(a||'');
+  commandData=await fetch(url).then(r=>r.json()).catch(e=>({error:String(e),totals:{},clients:[],assets:[]}));
+  renderCommandCenter();
+}
+function commandAssets(){
+  if(!commandData||commandData.error)return [];
+  const q=document.getElementById('cmd-search').value.trim().toLowerCase();
+  const type=document.getElementById('cmd-type').value;
+  const sev=document.getElementById('cmd-status').value;
+  return (commandData.assets||[]).filter(a=>{
+    if(type&&a.type!==type)return false;
+    if(sev&&a.severity!==sev)return false;
+    if(!q)return true;
+    const hay=((a.name||'')+' '+(a.id||'')+' '+(a.client||'')+' '+(a.account||'')+' '+(a.target||'')).toLowerCase();
+    return hay.includes(q);
+  });
+}
+function renderCommandKpis(){
+  const t=(commandData&&commandData.totals)||{};
+  const availability=t.availability_percent===null||t.availability_percent===undefined?'—':t.availability_percent+'%';
+  const avg=t.avg_response_time===null||t.avg_response_time===undefined?'—':Math.round(t.avg_response_time)+' ms';
+  const cards=[
+    ['Assets',t.assets||0,'Servers '+(t.servers||0)+' · Sites '+(t.sites||0),'neutral'],
+    ['Availability',availability,'Across known assets','good'],
+    ['Critical',t.critical||0,'Immediate action','bad'],
+    ['Warning',t.warning||0,'Needs review','warn'],
+    ['Unknown',t.unknown||0,'No current data','neutral'],
+    ['Ports Down',t.ports_down||0,'Blackbox failures','bad'],
+    ['Avg Site Latency',avg,'Uptime Kuma monitors','neutral']
+  ];
+  document.getElementById('cmd-kpis').innerHTML=cards.map(c=>'<div class="kpi '+c[3]+'"><div class="label">'+c[0]+'</div><div class="value">'+c[1]+'</div><div class="note">'+c[2]+'</div></div>').join('');
+}
+function renderCommandClients(){
+  const el=document.getElementById('cmd-client-health');
+  const clients=(commandData&&commandData.clients)||[];
+  if(!clients.length){el.innerHTML='<p style="color:#666;font-size:12px">No client data.</p>';return;}
+  el.innerHTML=clients.map(c=>{
+    return '<div class="health-item"><div class="health-main"><strong>'+escHtml(c.name)+'</strong><div class="meta">'+(c.servers||0)+' servers · '+(c.sites||0)+' sites · '+(c.accounts||[]).length+' accounts</div></div>'
+      +'<div class="health-counts">'+severityLabel(c.status)+'<span class="pill pill-critical">'+(c.critical||0)+' critical</span><span class="pill pill-warning">'+(c.warning||0)+' warning</span><span class="pill pill-ok">'+(c.up||0)+' ok</span></div></div>';
+  }).join('');
+}
+function renderCommandThresholds(){
+  const rules=(((commandData||{}).alert_settings||{}).rules)||{};
+  const items=[
+    ['CPU',rules.high_cpu],
+    ['Memory',rules.high_memory],
+    ['Disk /',rules.low_disk],
+    ['Network',rules.network_errors],
+    ['Process Down',rules.process_down],
+    ['Site Down',rules.uptime_kuma_monitor_down]
+  ];
+  document.getElementById('cmd-thresholds').innerHTML=items.map(([name,r])=>{
+    r=r||{};
+    const text=r.warning_threshold!==undefined?('Warn '+r.warning_threshold+'% / Crit '+r.critical_threshold+'%'):((r.severity||'critical')+' · '+(r.duration_minutes||'—')+' min');
+    return '<div><span style="color:#888">'+name+'</span><strong>'+text+'</strong></div>';
+  }).join('');
+}
+function renderCommandAssets(){
+  const list=commandAssets();
+  const tb=document.getElementById('cmd-assets');
+  const empty=document.getElementById('cmd-empty');
+  document.getElementById('cmd-count').textContent=list.length+' asset(s)';
+  tb.innerHTML='';
+  if(!list.length){empty.style.display='block';return;}
+  empty.style.display='none';
+  list.forEach(a=>{
+    const tr=document.createElement('tr');
+    tr.className='data-row';
+    const type='<span class="badge">'+(a.type==='site'?'Site':'Server')+'</span>';
+    const edit='<button class="btn btn-secondary btn-sm" onclick="openAssetEdit(\''+String(a.type).replace(/'/g,'')+'\',\''+encodeURIComponent(a.id||'')+'\')">Edit</button>';
+    const silence=silenceButton(a.type==='site'?'site':'server',a.id||'',a.type==='site'?'Site Monitor Down':'');
+    const dash=a.dashboard_url?'<a class="link-btn" href="'+a.dashboard_url+'" target="_blank">Dashboard</a>':'';
+    tr.innerHTML='<td><strong>'+escHtml(a.name||a.id)+'</strong><div class="sub" style="margin:3px 0 0">'+escHtml(a.target||a.id||'')+'</div></td>'
+      +'<td>'+type+'</td><td>'+severityLabel(a.severity)+'<div class="sub" style="margin:4px 0 0">'+escHtml(a.reason||'')+'</div></td>'
+      +'<td>'+escHtml(a.client||'')+'</td><td>'+escHtml(a.account||'')+'</td><td>'+escHtml(assetSignal(a))+'</td><td>'+edit+' '+silence+' '+dash+'</td>';
+    tb.appendChild(tr);
+  });
+}
+function renderCommandCenter(){
+  if(commandData&&commandData.error){
+    document.getElementById('cmd-assets').innerHTML='<tr><td colspan="7" style="color:#ef4444">Error: '+escHtml(commandData.error)+'</td></tr>';
+    return;
+  }
+  renderCommandKpis();
+  renderCommandClients();
+  renderCommandThresholds();
+  renderCommandAssets();
+}
+async function openAssetEdit(type,encodedId){
+  const id=decodeURIComponent(encodedId||'');
+  if(type==='site'){
+    switchTab('kuma');
+    await loadKumaSites();
+    selectKumaSite(id);
+  } else {
+    switchTab('servers');
+    await load();
+    selectServer(id);
+  }
+}
+async function refreshEditAccounts(){
+  const c=comboVal('e-client-sel','e-client-new');
+  const acc=await fetchAccounts(c);
+  fillCombo('e-account-sel','e-account-new',acc,document.getElementById('e-account-sel').dataset.current||'');
+}
+async function load(){
+  await loadSilences();
+  const d=await fetch(API+'/api/v1/servers').then(r=>r.json());
+  servers=d.servers||[];
+  const clients=await fetchClients();
+  const fc=document.getElementById('filter-client');
+  const prevC=fc.value;fc.innerHTML='<option value="">All clients</option>';
+  clients.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;fc.appendChild(o);});
+  if(prevC)fc.value=prevC;
+  const accounts=await fetchAccounts(fc.value||'');
+  const fa=document.getElementById('filter-account');
+  const prevA=fa.value;fa.innerHTML='<option value="">All accounts</option>';
+  accounts.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;fa.appendChild(o);});
+  if(prevA)fa.value=prevA;
+  render();
+}
+function filtered(){
+  const q=document.getElementById('search').value.trim().toLowerCase();
+  const c=document.getElementById('filter-client').value;
+  const a=document.getElementById('filter-account').value;
+  return servers.filter(s=>{
+    if(c&&s.client!==c)return false;
+    if(a&&s.account!==a)return false;
+    if(!q)return true;
+    const hay=(s.hostname+' '+(s.name||'')+' '+(s.ip||'')).toLowerCase();
+    return hay.includes(q);
+  });
+}
+function render(){
+  const list=filtered();
+  document.getElementById('count').textContent=list.length+' server(s)';
+  const tb=document.getElementById('rows');
+  const empty=document.getElementById('empty');
+  tb.innerHTML='';
+  if(!list.length){empty.style.display='block';return;}
+  empty.style.display='none';
+  list.forEach(s=>{
+    const tr=document.createElement('tr');
+    tr.className='data-row'+(selected===s.hostname?' selected':'');
+    const cu=s.client||'Unassigned';
+    const badge=cu==='Unassigned'?'badge badge-unassigned':'badge';
+    tr.innerHTML=`<td><code>${s.hostname}</code></td><td>${s.name||'—'}</td><td><span class="${badge}">${cu}</span></td><td>${s.account||'—'}</td><td>${s.ip||'—'}</td><td>${s.port_count||0}</td><td>${silenceButton('server',s.hostname,'')}</td>`;
+    tr.onclick=()=>selectServer(s.hostname);
+    tb.appendChild(tr);
+  });
+}
+async function selectServer(host){
+  selected=host;
+  render();
+  const s=servers.find(x=>x.hostname===host);
+  if(!s)return;
+  document.getElementById('edit-form').style.display='block';
+  document.getElementById('edit-hint').textContent='Editing '+host;
+  document.getElementById('e-host').value=s.hostname;
+  document.getElementById('e-name').value=s.name||'';
+  document.getElementById('e-ip').value=s.ip||'';
+  const clients=await fetchClients();
+  fillCombo('e-client-sel','e-client-new',clients,s.client||'');
+  const acc=await fetchAccounts(s.client||'');
+  document.getElementById('e-account-sel').dataset.current=s.account||'';
+  fillCombo('e-account-sel','e-account-new',acc,s.account||'');
+  renderServerGroups(host);
+}
+async function renderServerGroups(host){
+  const el=document.getElementById('e-groups');if(!el)return;
+  const all=await fetch(API+'/api/v1/alert-groups').then(r=>r.json()).catch(()=>({groups:[]}));
+  const mine=await fetch(API+'/api/v1/servers/'+encodeURIComponent(host)+'/groups').then(r=>r.json()).catch(()=>({group_ids:[]}));
+  const groups=all.groups||[];const sel={};(mine.group_ids||[]).forEach(id=>sel[id]=1);
+  if(!groups.length){el.innerHTML='<span style="color:#666">No alert groups yet. Create them in the Alert Groups tab.</span>';return;}
+  el.innerHTML='';
+  groups.forEach(g=>{
+    const row=document.createElement('label');
+    row.style.cssText='display:flex;align-items:center;gap:6px;padding:3px 0';
+    const cb=document.createElement('input');cb.type='checkbox';cb.className='e-group';cb.value=g.id;cb.checked=!!sel[g.id];
+    const span=document.createElement('span');span.textContent=g.name+(g.enabled?'':' (off)');
+    row.appendChild(cb);row.appendChild(span);el.appendChild(row);
+  });
+}
+async function saveEdit(){
+  const host=document.getElementById('e-host').value;
+  const st=document.getElementById('edit-status');
+  const body={name:document.getElementById('e-name').value.trim(),client:comboVal('e-client-sel','e-client-new'),account:comboVal('e-account-sel','e-account-new')};
+  const d=await fetch(API+'/api/v1/servers/'+encodeURIComponent(host),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());
+  // save alert-group membership
+  const gids=[].slice.call(document.querySelectorAll('#e-groups .e-group')).filter(c=>c.checked).map(c=>c.value);
+  await fetch(API+'/api/v1/servers/'+encodeURIComponent(host)+'/groups',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_ids:gids})}).catch(()=>{});
+  st.textContent=d.message||d.error;st.style.color=d.error?'#ef4444':'#22c55e';
+  if(!d.error)load().then(()=>selectServer(host));
+}
+async function refreshKumaEditAccounts(){
+  const c=comboVal('kuma-e-client-sel','kuma-e-client-new');
+  const acc=await fetchAccounts(c);
+  fillCombo('kuma-e-account-sel','kuma-e-account-new',acc,document.getElementById('kuma-e-account-sel').dataset.current||'');
+}
+async function loadKumaSites(){
+  await loadSilences();
+  const d=await fetch(API+'/api/v1/uptime-kuma/sites').then(r=>r.json()).catch(()=>({sites:[]}));
+  kumaSites=d.sites||[];
+  const clients=await fetchClients();
+  const fc=document.getElementById('kuma-filter-client');
+  const prevC=fc.value;fc.innerHTML='<option value="">All clients</option>';
+  clients.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;fc.appendChild(o);});
+  if(prevC)fc.value=prevC;
+  const accounts=await fetchAccounts(fc.value||'');
+  const fa=document.getElementById('kuma-filter-account');
+  const prevA=fa.value;fa.innerHTML='<option value="">All accounts</option>';
+  accounts.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;fa.appendChild(o);});
+  if(prevA)fa.value=prevA;
+  renderKumaSites();
+}
+function kumaStatus(site){
+  if(site.status===1)return ['UP','badge badge-up'];
+  if(site.status===0)return ['DOWN','badge badge-down'];
+  return ['NO DATA','badge badge-nodata'];
+}
+function filteredKumaSites(){
+  const q=document.getElementById('kuma-search').value.trim().toLowerCase();
+  const c=document.getElementById('kuma-filter-client').value;
+  const a=document.getElementById('kuma-filter-account').value;
+  return kumaSites.filter(s=>{
+    if(c&&s.client!==c)return false;
+    if(a&&s.account!==a)return false;
+    if(!q)return true;
+    const hay=((s.monitor_name||'')+' '+(s.name||'')+' '+(s.target||'')+' '+(s.monitor_url||'')+' '+(s.monitor_hostname||'')).toLowerCase();
+    return hay.includes(q);
+  });
+}
+function renderKumaSites(){
+  const list=filteredKumaSites();
+  document.getElementById('kuma-count').textContent=list.length+' site(s)';
+  const tb=document.getElementById('kuma-rows');
+  const empty=document.getElementById('kuma-empty');
+  tb.innerHTML='';
+  if(!list.length){empty.style.display='block';return;}
+  empty.style.display='none';
+  list.forEach(s=>{
+    const tr=document.createElement('tr');
+    tr.className='data-row'+(selectedKuma===s.monitor_name?' selected':'');
+    const cu=s.client||'Unassigned';
+    const badge=cu==='Unassigned'?'badge badge-unassigned':'badge';
+    const st=kumaStatus(s);
+    const latency=(s.response_time===null||s.response_time===undefined)?'—':Math.round(s.response_time)+' ms';
+    tr.innerHTML=`<td><a href="${kumaDashboardUrl(s.monitor_name)}" target="_blank" onclick="event.stopPropagation()" style="color:#93c5fd;text-decoration:none"><code>${s.monitor_name}</code></a></td><td>${s.name||'—'}</td><td><span class="${st[1]}">${st[0]}</span></td><td><span class="${badge}">${cu}</span></td><td>${s.account||'—'}</td><td>${s.monitor_type||'—'}</td><td>${s.target||'—'}</td><td>${latency}</td><td>${silenceButton('site',s.monitor_name,'Site Monitor Down')}</td>`;
+    tr.onclick=()=>selectKumaSite(s.monitor_name);
+    tb.appendChild(tr);
+  });
+}
+async function selectKumaSite(monitorName){
+  selectedKuma=monitorName;
+  renderKumaSites();
+  const s=kumaSites.find(x=>x.monitor_name===monitorName);
+  if(!s)return;
+  document.getElementById('kuma-edit-form').style.display='block';
+  document.getElementById('kuma-edit-hint').textContent='Editing '+monitorName;
+  document.getElementById('kuma-e-monitor').value=s.monitor_name;
+  document.getElementById('kuma-e-name').value=s.name||'';
+  document.getElementById('kuma-e-target').value=s.target||'';
+  document.getElementById('kuma-open-dashboard').href=kumaDashboardUrl(s.monitor_name);
+  const clients=await fetchClients();
+  fillCombo('kuma-e-client-sel','kuma-e-client-new',clients,s.client||'');
+  const acc=await fetchAccounts(s.client||'');
+  document.getElementById('kuma-e-account-sel').dataset.current=s.account||'';
+  fillCombo('kuma-e-account-sel','kuma-e-account-new',acc,s.account||'');
+  renderKumaSiteGroups(monitorName);
+}
+async function renderKumaSiteGroups(monitorName){
+  const el=document.getElementById('kuma-e-groups');if(!el)return;
+  const all=await fetch(API+'/api/v1/alert-groups').then(r=>r.json()).catch(()=>({groups:[]}));
+  const mine=await fetch(API+'/api/v1/uptime-kuma/sites/'+encodeURIComponent(monitorName)+'/groups').then(r=>r.json()).catch(()=>({group_ids:[]}));
+  const groups=all.groups||[];const sel={};(mine.group_ids||[]).forEach(id=>sel[id]=1);
+  if(!groups.length){el.innerHTML='<span style="color:#666">No alert groups yet. Create them in the Alert Groups tab.</span>';return;}
+  el.innerHTML='';
+  groups.forEach(g=>{
+    const row=document.createElement('label');
+    row.style.cssText='display:flex;align-items:center;gap:6px;padding:3px 0';
+    const cb=document.createElement('input');cb.type='checkbox';cb.className='kuma-e-group';cb.value=g.id;cb.checked=!!sel[g.id];
+    const span=document.createElement('span');span.textContent=g.name+(g.enabled?'':' (off)');
+    row.appendChild(cb);row.appendChild(span);el.appendChild(row);
+  });
+}
+async function saveKumaSite(){
+  const monitorName=document.getElementById('kuma-e-monitor').value;
+  const st=document.getElementById('kuma-edit-status');
+  const body={name:document.getElementById('kuma-e-name').value.trim(),client:comboVal('kuma-e-client-sel','kuma-e-client-new'),account:comboVal('kuma-e-account-sel','kuma-e-account-new')};
+  const d=await fetch(API+'/api/v1/uptime-kuma/sites/'+encodeURIComponent(monitorName),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  if(!d.error){
+    const gids=[].slice.call(document.querySelectorAll('#kuma-e-groups .kuma-e-group')).filter(c=>c.checked).map(c=>c.value);
+    await fetch(API+'/api/v1/uptime-kuma/sites/'+encodeURIComponent(monitorName)+'/groups',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_ids:gids})}).catch(()=>{});
+  }
+  st.textContent=d.message||d.error;st.style.color=d.error?'#ef4444':(d.synced?'#22c55e':'#f59e0b');
+  if(!d.error)loadKumaSites().then(()=>selectKumaSite(monitorName));
+}
+function setRuleForm(ruleId, cfg){
+  document.getElementById('rule-'+ruleId+'-enabled').checked=!!cfg.enabled;
+  document.getElementById('rule-'+ruleId+'-duration').value=cfg.duration_minutes||'';
+  document.getElementById('rule-'+ruleId+'-severity').value=cfg.severity||'warning';
+}
+function collectRule(ruleId, hasThreshold){
+  const rule={
+    enabled:document.getElementById('rule-'+ruleId+'-enabled').checked,
+    duration_minutes:Number(document.getElementById('rule-'+ruleId+'-duration').value||0),
+    severity:document.getElementById('rule-'+ruleId+'-severity').value||'warning'
+  };
+  return rule;
+}
+function setThresholdRuleForm(ruleId, cfg){
+  document.getElementById('rule-'+ruleId+'-enabled').checked=!!cfg.enabled;
+  document.getElementById('rule-'+ruleId+'-duration').value=cfg.duration_minutes||'';
+  document.getElementById('rule-'+ruleId+'-warning').value=(cfg.warning_threshold===undefined||cfg.warning_threshold===null)?'':cfg.warning_threshold;
+  document.getElementById('rule-'+ruleId+'-critical').value=(cfg.critical_threshold===undefined||cfg.critical_threshold===null)?'':cfg.critical_threshold;
+}
+function collectThresholdRule(ruleId){
+  return {
+    enabled:document.getElementById('rule-'+ruleId+'-enabled').checked,
+    duration_minutes:Number(document.getElementById('rule-'+ruleId+'-duration').value||0),
+    warning_threshold:Number(document.getElementById('rule-'+ruleId+'-warning').value||0),
+    critical_threshold:Number(document.getElementById('rule-'+ruleId+'-critical').value||0)
+  };
+}
+async function loadAlertSettings(){
+  const st=document.getElementById('alert-settings-status');
+  st.textContent='Loading...';st.style.color='#666';
+  const d=await fetch(API+'/api/v1/alert-settings').then(r=>r.json()).catch(e=>({error:String(e)}));
+  if(d.error){st.textContent=d.error;st.style.color='#ef4444';return;}
+  const rules=(d.rules||{});
+  setRuleForm('node_down',rules.node_down||{});
+  setRuleForm('port_down',rules.port_down||{});
+  setRuleForm('process_down',rules.process_down||{});
+  setRuleForm('uptime_kuma_source_down',rules.uptime_kuma_source_down||{});
+  setRuleForm('uptime_kuma_monitor_down',rules.uptime_kuma_monitor_down||{});
+  setThresholdRuleForm('high_cpu',rules.high_cpu||{});
+  setThresholdRuleForm('high_memory',rules.high_memory||{});
+  setThresholdRuleForm('low_disk',rules.low_disk||{});
+  setThresholdRuleForm('network_errors',rules.network_errors||{});
+  st.textContent='Loaded';st.style.color='#22c55e';
+}
+async function saveAlertSettings(){
+  const st=document.getElementById('alert-settings-status');
+  st.textContent='Saving and syncing Grafana...';st.style.color='#666';
+  const body={rules:{
+    node_down:collectRule('node_down',false),
+    port_down:collectRule('port_down',false),
+    process_down:collectRule('process_down',false),
+    uptime_kuma_source_down:collectRule('uptime_kuma_source_down',false),
+    uptime_kuma_monitor_down:collectRule('uptime_kuma_monitor_down',false),
+    high_cpu:collectThresholdRule('high_cpu'),
+    high_memory:collectThresholdRule('high_memory'),
+    low_disk:collectThresholdRule('low_disk'),
+    network_errors:collectThresholdRule('network_errors')
+  }};
+  const d=await fetch(API+'/api/v1/alert-settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  if(d.error){st.textContent='Error: '+d.error;st.style.color='#ef4444';return;}
+  st.textContent=d.synced?'Saved and synced':'Saved, but Grafana sync has issues';
+  st.style.color=d.synced?'#22c55e':'#f59e0b';
+  if(d.settings&&d.settings.rules){
+    const rules=d.settings.rules;
+    setRuleForm('node_down',rules.node_down||{});
+    setRuleForm('port_down',rules.port_down||{});
+    setRuleForm('process_down',rules.process_down||{});
+    setRuleForm('uptime_kuma_source_down',rules.uptime_kuma_source_down||{});
+    setRuleForm('uptime_kuma_monitor_down',rules.uptime_kuma_monitor_down||{});
+    setThresholdRuleForm('high_cpu',rules.high_cpu||{});
+    setThresholdRuleForm('high_memory',rules.high_memory||{});
+    setThresholdRuleForm('low_disk',rules.low_disk||{});
+    setThresholdRuleForm('network_errors',rules.network_errors||{});
+  }
+}
+function orgStatus(msg,ok){const e=document.getElementById('org-status');e.textContent=msg;e.style.color=ok?'#22c55e':'#ef4444';}
+async function loadOrg(){
+  orgData=await fetch(API+'/api/v1/taxonomy').then(r=>r.json());
+  const ul=document.getElementById('org-clients');ul.innerHTML='';
+  (orgData.clients||[]).forEach(c=>{
+    const li=document.createElement('li');
+    li.className=orgClient===c.name?'active':'';
+    const total=(c.server_count||0)+(c.site_count||0);
+    li.innerHTML=`<span>${c.name}</span><span class="cnt">${total}</span>`;
+    li.onclick=()=>{orgClient=c.name;loadOrg();};
+    ul.appendChild(li);
+  });
+  if(!orgClient&&orgData.clients&&orgData.clients.length)orgClient=orgData.clients[0].name;
+  if(!document.getElementById('org-adminalert-rows'))renderAdminAlert();
+  if(!document.getElementById('org-allalert-rows'))renderAllAlert();
+  const cur=(orgData.clients||[]).find(x=>x.name===orgClient);
+  document.getElementById('org-detail').style.display=cur?'block':'none';
+  document.getElementById('org-detail-title').textContent=cur?('Client: '+cur.name):'Select a client';
+  if(cur){await loadOrgsCache();renderOrgAccess(cur.name);renderOrgAlert(cur.name);}
+  const tb=document.getElementById('org-accounts');tb.innerHTML='';
+  if(cur)(cur.accounts||[]).forEach(a=>{
+    const tr=document.createElement('tr');
+    const total=(a.server_count||0)+(a.site_count||0);
+    tr.innerHTML=`<td>${a.name}</td><td>${total}</td><td class="org-acc-actions"></td>`;
+    const td=tr.querySelector('.org-acc-actions');
+    [['Rename','rename'],['Merge','merge'],['Delete','del']].forEach(([label,act])=>{
+      const b=document.createElement('button');
+      b.className=(act==='del'?'btn btn-danger btn-sm':'btn btn-secondary btn-sm');
+      b.textContent=label;
+      b.dataset.act=act;
+      b.dataset.account=a.name;
+      b.onclick=()=>orgAccountAction(act,a.name);
+      td.appendChild(b);
+    });
+    tb.appendChild(tr);
+  });
+}
+function orgAccountAction(act,name){
+  if(act==='rename')return orgRenameAccount(name);
+  if(act==='merge')return orgMergeAccount(name);
+  return orgDeleteAccount(name);
+}
+async function orgAddClient(){
+  const n=prompt('New client name:');if(!n)return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){orgClient=d.name||n.trim();await loadOrg();await load();}
+}
+async function orgRenameClient(){
+  if(!orgClient)return;
+  const n=prompt('Rename client to:',orgClient);if(!n||n===orgClient)return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_name:n})}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){orgClient=n.trim();await loadOrg();await load();}
+}
+async function orgMergeClient(){
+  if(!orgClient)return;
+  const t=prompt('Merge all servers from "'+orgClient+'" into client:');if(!t)return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient)+'?merge_into='+encodeURIComponent(t),{method:'DELETE'}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){orgClient=t.trim();await loadOrg();await load();}
+}
+async function orgDeleteClient(){
+  if(!orgClient)return;
+  if(!confirm('Delete client "'+orgClient+'"? Servers must be merged or reassigned first.'))return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient),{method:'DELETE'}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){orgClient=null;await loadOrg();await load();}
+}
+async function orgAddAccount(){
+  if(!orgClient)return;
+  const n=prompt('New account name under '+orgClient+':');if(!n)return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient)+'/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){await loadOrg();await load();}
+}
+async function orgRenameAccount(oldName){
+  const n=prompt('Rename account to:',oldName);if(!n||n===oldName)return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient)+'/accounts/'+encodeURIComponent(oldName),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_name:n})}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){await loadOrg();await load();}
+}
+async function orgMergeAccount(oldName){
+  const t=prompt('Merge account "'+oldName+'" into:');if(!t)return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient)+'/accounts/'+encodeURIComponent(oldName)+'?merge_into='+encodeURIComponent(t),{method:'DELETE'}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){await loadOrg();await load();}
+}
+async function orgDeleteAccount(name){
+  if(!confirm('Delete account "'+name+'"?'))return;
+  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient)+'/accounts/'+encodeURIComponent(name),{method:'DELETE'}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){await loadOrg();await load();}
+}
+document.getElementById('filter-client').onchange=async function(){await load();};
+document.getElementById('cmd-client').onchange=async function(){await loadCommandCenter();};
+document.getElementById('cmd-account').onchange=async function(){await loadCommandCenter();};
+document.getElementById('kuma-filter-client').onchange=async function(){
+  const accounts=await fetchAccounts(this.value||'');
+  const fa=document.getElementById('kuma-filter-account');
+  fa.innerHTML='<option value="">All accounts</option>';
+  accounts.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;fa.appendChild(o);});
+  renderKumaSites();
+};
+loadCommandCenter();
+
+let orgsCache={};
+async function loadOrgsCache(){
+  const d=await fetch(API+'/api/v1/grafana-orgs/status').then(r=>r.json()).catch(()=>({orgs:[]}));
+  orgsCache={};(d.orgs||[]).forEach(o=>{orgsCache[o.client]=o;});
+}
+function renderOrgAccess(client){
+  const el=document.getElementById('org-access');
+  if(!el)return;
+  const o=orgsCache[client];
+  if(o){
+    const dash=o.dashboard_url?'<a href="'+o.dashboard_url+'" target="_blank" style="color:#3b82f6">Open dashboard</a>':'-';
+    el.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'
+      +'<div><span style="color:#22c55e">\u25cf Portal active</span><br><span style="color:#888">Login:</span> <b>'+(o.login||'-')+'</b> &nbsp; <span style="color:#888">Dashboard:</span> '+dash+'</div>'
+      +'<button class="btn btn-danger btn-sm" onclick="orgDeletePortal(\''+client+'\')">Delete portal</button></div>'
+      +'<div id="org-access-status" style="margin-top:8px"></div>';
+  } else {
+    el.innerHTML='<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">'
+      +'<div class="field" style="margin:0"><label>Viewer password</label><input id="org-portal-pass" type="password" placeholder="ChangeMe@2026" style="min-width:160px"/></div>'
+      +'<button class="btn btn-primary btn-sm" onclick="orgCreatePortal(\''+client+'\')">Create client portal</button></div>'
+      +'<p style="color:#888;margin-top:8px">Creates a separate Grafana org so this client can log in and view only their servers.</p>'
+      +'<div id="org-access-status" style="margin-top:8px"></div>';
+  }
+}
+async function orgCreatePortal(client){
+  const pass=(document.getElementById('org-portal-pass')||{}).value||'';
+  const st=document.getElementById('org-access-status');
+  if(st){st.textContent='Creating portal...';st.style.color='#aaa';}
+  const d=await fetch(API+'/api/v1/grafana-orgs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client,password:pass||'ChangeMe@2026'})}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  if(d.error){if(st){st.textContent='Error: '+d.error;st.style.color='#ef4444';}}
+  else{if(st){st.textContent='Created! Login: '+d.login+' / '+(pass||'ChangeMe@2026');st.style.color='#22c55e';}}
+  await loadOrgsCache();renderOrgAccess(client);
+}
+async function orgDeletePortal(client){
+  if(!confirm('Delete the Grafana portal for "'+client+'"? Removes their org, dashboard, and viewer login. Servers are NOT affected.'))return;
+  const st=document.getElementById('org-access-status');
+  if(st){st.textContent='Deleting portal...';st.style.color='#aaa';}
+  const d=await fetch(API+'/api/v1/grafana-orgs/'+encodeURIComponent(client),{method:'DELETE'}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  await loadOrgsCache();renderOrgAccess(client);
+}
+async function renderOrgAlert(client){
+  const el=document.getElementById('org-alert');
+  if(!el)return;
+  const d=await fetch(API+'/api/v1/clients/'+encodeURIComponent(client)+'/alert-email').then(r=>r.json()).catch(()=>({recipients:[]}));
+  const recips=(d.recipients&&d.recipients.length)?d.recipients:[];
+  el.innerHTML='<div id="org-alert-rows"></div>'
+    +'<button class="btn btn-secondary btn-sm" onclick="addAlertRow()">+ Add email</button>'
+    +'<div style="margin-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+    +'<button class="btn btn-primary btn-sm" onclick="saveOrgAlert()">Save</button>'
+    +'<button class="btn btn-secondary btn-sm" onclick="saveOrgAlert(true)">Remove all</button></div>'
+    +'<p style="color:#888;margin-top:8px">One box per recipient \u2014 toggle each on/off individually with its checkbox. Admin always receives every alert as a fallback. Enabled recipients get alerts on this client\u2019s assigned servers (routed by host).</p>'
+    +'<div id="org-alert-status" style="margin-top:8px"></div>';
+  const rows=document.getElementById('org-alert-rows');
+  recips.forEach(r=>rows.appendChild(makeAlertRow(r.email,r.enabled)));
+}
+function makeAlertRow(email,enabled){
+  const div=document.createElement('div');
+  div.className='alert-row';
+  div.style.cssText='display:flex;gap:8px;margin-bottom:6px;align-items:center';
+  const chk=document.createElement('input');
+  chk.type='checkbox';chk.className='alert-enabled';chk.checked=(enabled!==false);chk.title='enabled';
+  const inp=document.createElement('input');
+  inp.type='email';inp.className='alert-email';inp.placeholder='ops@client.com';
+  inp.style.cssText='flex:1;min-width:220px';inp.value=email||'';
+  const del=document.createElement('button');
+  del.className='btn btn-secondary btn-sm';del.textContent='\u2715';del.title='remove';
+  del.onclick=function(){div.remove();};
+  div.appendChild(chk);div.appendChild(inp);div.appendChild(del);
+  return div;
+}
+function addAlertRow(){
+  const rows=document.getElementById('org-alert-rows');
+  if(rows)rows.appendChild(makeAlertRow('',true));
+}
+function collectRecipients(containerId){
+  const out=[];const seen={};
+  document.querySelectorAll('#'+containerId+' .alert-row').forEach(row=>{
+    const v=(((row.querySelector('.alert-email')||{}).value)||'').trim();
+    const en=((row.querySelector('.alert-enabled')||{}).checked);
+    if(v&&!seen[v]){seen[v]=1;out.push({email:v,enabled:en});}
+  });
+  return out;
+}
+function recipSummary(recips){
+  return (recips||[]).map(r=>r.email+(r.enabled?'':' (off)')).join(', ');
+}
+async function saveOrgAlert(removeAll){
+  const client=orgClient;
+  const recipients=removeAll?[]:collectRecipients('org-alert-rows');
+  const st=document.getElementById('org-alert-status');
+  if(st){st.textContent='Saving...';st.style.color='#aaa';}
+  const d=await fetch(API+'/api/v1/clients/'+encodeURIComponent(client)+'/alert-email',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipients})}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  if(st){
+    if(d.error){st.textContent='Error: '+d.error;st.style.color='#ef4444';}
+    else{const s=recipSummary(d.recipients);st.textContent=(s?('Saved: '+s):'Removed')+(d.synced?' \u00b7 routing updated':(' \u00b7 sync issue: '+(d.message||'')));st.style.color=d.synced?'#22c55e':'#f59e0b';}
+  }
+  renderOrgAlert(client);
+}
+async function renderAllAlert(){
+  const el=document.getElementById('org-allalert');
+  if(!el)return;
+  const d=await fetch(API+'/api/v1/alert-recipients/all-clients').then(r=>r.json()).catch(()=>({recipients:[]}));
+  const recips=(d.recipients&&d.recipients.length)?d.recipients:[];
+  el.innerHTML='<div id="org-allalert-rows"></div>'
+    +'<button class="btn btn-secondary btn-sm" onclick="addAllAlertRow()">+ Add email</button>'
+    +'<div style="margin-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+    +'<button class="btn btn-primary btn-sm" onclick="saveAllAlert()">Save</button>'
+    +'<button class="btn btn-secondary btn-sm" onclick="saveAllAlert(true)">Remove all</button></div>'
+    +'<div id="org-allalert-status" style="margin-top:8px"></div>';
+  const rows=document.getElementById('org-allalert-rows');
+  recips.forEach(r=>rows.appendChild(makeAlertRow(r.email,r.enabled)));
+}
+function addAllAlertRow(){
+  const rows=document.getElementById('org-allalert-rows');
+  if(rows)rows.appendChild(makeAlertRow('',true));
+}
+async function saveAllAlert(removeAll){
+  const recipients=removeAll?[]:collectRecipients('org-allalert-rows');
+  const st=document.getElementById('org-allalert-status');
+  if(st){st.textContent='Saving...';st.style.color='#aaa';}
+  const d=await fetch(API+'/api/v1/alert-recipients/all-clients',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipients})}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  if(st){
+    if(d.error){st.textContent='Error: '+d.error;st.style.color='#ef4444';}
+    else{const s=recipSummary(d.recipients);st.textContent=(s?('Saved: '+s):'Removed')+(d.synced?' \u00b7 routing updated':(' \u00b7 sync issue: '+(d.message||'')));st.style.color=d.synced?'#22c55e':'#f59e0b';}
+  }
+  renderAllAlert();
+}
+async function renderAdminAlert(){
+  const el=document.getElementById('org-adminalert');
+  if(!el)return;
+  const d=await fetch(API+'/api/v1/alert-recipients/admin').then(r=>r.json()).catch(()=>({recipients:[]}));
+  const recips=(d.recipients&&d.recipients.length)?d.recipients:[];
+  el.innerHTML='<div id="org-adminalert-rows"></div>'
+    +'<button class="btn btn-secondary btn-sm" onclick="addAdminAlertRow()">+ Add email</button>'
+    +'<div style="margin-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+    +'<button class="btn btn-primary btn-sm" onclick="saveAdminAlert()">Save</button></div>'
+    +'<div id="org-adminalert-status" style="margin-top:8px"></div>';
+  const rows=document.getElementById('org-adminalert-rows');
+  recips.forEach(r=>rows.appendChild(makeAlertRow(r.email,r.enabled)));
+}
+function addAdminAlertRow(){
+  const rows=document.getElementById('org-adminalert-rows');
+  if(rows)rows.appendChild(makeAlertRow('',true));
+}
+async function saveAdminAlert(){
+  const recipients=collectRecipients('org-adminalert-rows');
+  const st=document.getElementById('org-adminalert-status');
+  if(!recipients.length){if(st){st.textContent='Keep at least one admin address (it is the global fallback / SMTP sender).';st.style.color='#f59e0b';}return;}
+  if(st){st.textContent='Saving...';st.style.color='#aaa';}
+  const d=await fetch(API+'/api/v1/alert-recipients/admin',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipients})}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  if(st){
+    if(d.error){st.textContent='Error: '+d.error;st.style.color='#ef4444';}
+    else{const s=recipSummary(d.recipients);st.textContent='Saved: '+s+(d.synced?' \u00b7 routing updated':(' \u00b7 sync issue: '+(d.message||'')));st.style.color=d.synced?'#22c55e':'#f59e0b';}
+  }
+  renderAdminAlert();
+}
+let groupsCache=[], editingGroupId=null, allServersCache=[], allSitesCache=[];
+async function loadGroups(){
+  const d=await fetch(API+'/api/v1/alert-groups').then(r=>r.json()).catch(()=>({groups:[]}));
+  groupsCache=d.groups||[];
+  const s=await fetch(API+'/api/v1/servers').then(r=>r.json()).catch(()=>({servers:[]}));
+  allServersCache=s.servers||[];
+  const ks=await fetch(API+'/api/v1/uptime-kuma/sites').then(r=>r.json()).catch(()=>({sites:[]}));
+  allSitesCache=ks.sites||[];
+  renderGroupList();
+  if(editingGroupId&&!groupsCache.find(g=>g.id===editingGroupId))editingGroupId=null;
+  if(!editingGroupId)newGroup(); else editGroup(editingGroupId);
+}
+function renderGroupList(){
+  const el=document.getElementById('group-list');if(!el)return;
+  if(!groupsCache.length){el.innerHTML='<p style="color:#666;font-size:12px">No alert groups yet. Create one on the right.</p>';return;}
+  el.innerHTML='';
+  groupsCache.forEach(g=>{
+    const emails=(g.recipients||[]).filter(r=>r.enabled).map(r=>r.email).join(', ')||'\u2014';
+    const div=document.createElement('div');
+    div.className='card';div.style.cssText='cursor:pointer;padding:10px';
+    if(editingGroupId===g.id)div.style.borderColor='#f59e0b';
+    div.innerHTML='<strong>'+g.name+'</strong> <span class="badge">'+(g.hosts||[]).length+' servers</span> <span class="badge">'+(g.sites||[]).length+' sites</span>'+(g.enabled?'':' <span class="badge badge-unassigned">off</span>')+'<div class="sub" style="margin-top:4px">to: '+emails+'</div>';
+    div.onclick=()=>editGroup(g.id);
+    el.appendChild(div);
+  });
+}
+function newGroup(){
+  editingGroupId=null;
+  document.getElementById('group-name').value='';
+  document.getElementById('group-enabled').checked=true;
+  renderServerPicker([]);renderSitePicker([]);renderGroupRecipients([]);
+  document.getElementById('group-editor-title').textContent='New alert group';
+  document.getElementById('group-delete-btn').style.display='none';
+  const st=document.getElementById('group-status');if(st)st.textContent='';
+  renderGroupList();
+}
+function editGroup(id){
+  const g=groupsCache.find(x=>x.id===id);if(!g)return;
+  editingGroupId=id;
+  document.getElementById('group-name').value=g.name||'';
+  document.getElementById('group-enabled').checked=g.enabled!==false;
+  renderServerPicker(g.hosts||[]);renderSitePicker(g.sites||[]);renderGroupRecipients(g.recipients||[]);
+  document.getElementById('group-editor-title').textContent='Edit: '+g.name;
+  document.getElementById('group-delete-btn').style.display='inline-block';
+  renderGroupList();
+}
+function renderServerPicker(selected){
+  const el=document.getElementById('group-servers');if(!el)return;el.innerHTML='';
+  const sel={};(selected||[]).forEach(h=>sel[h]=1);
+  if(!allServersCache.length){el.innerHTML='<span style="color:#666;font-size:12px">No servers</span>';return;}
+  allServersCache.forEach(s=>{
+    const row=document.createElement('label');
+    row.style.cssText='display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px';
+    const cb=document.createElement('input');cb.type='checkbox';cb.className='group-server';cb.value=s.hostname;cb.checked=!!sel[s.hostname];
+    const span=document.createElement('span');span.innerHTML=s.hostname+(s.name?(' ('+s.name+')'):'')+' <span style="color:#666">'+(s.client||'')+'</span>';
+    row.appendChild(cb);row.appendChild(span);el.appendChild(row);
+  });
+}
+function renderSitePicker(selected){
+  const el=document.getElementById('group-sites');if(!el)return;el.innerHTML='';
+  const sel={};(selected||[]).forEach(s=>sel[s]=1);
+  if(!allSitesCache.length){el.innerHTML='<span style="color:#666;font-size:12px">No Uptime Kuma sites</span>';return;}
+  allSitesCache.forEach(s=>{
+    const row=document.createElement('label');
+    row.style.cssText='display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px';
+    const cb=document.createElement('input');cb.type='checkbox';cb.className='group-site';cb.value=s.monitor_name;cb.checked=!!sel[s.monitor_name];
+    const span=document.createElement('span');span.innerHTML=s.monitor_name+(s.name&&s.name!==s.monitor_name?(' ('+s.name+')'):'')+' <span style="color:#666">'+(s.client||'')+'</span>';
+    row.appendChild(cb);row.appendChild(span);el.appendChild(row);
+  });
+}
+function renderGroupRecipients(recips){
+  const el=document.getElementById('group-recipients');if(!el)return;el.innerHTML='';
+  (recips||[]).forEach(r=>el.appendChild(makeAlertRow(r.email,r.enabled)));
+}
+function addGroupRecipient(){const el=document.getElementById('group-recipients');if(el)el.appendChild(makeAlertRow('',true));}
+async function saveGroup(){
+  const name=document.getElementById('group-name').value.trim();
+  const enabled=document.getElementById('group-enabled').checked;
+  const hosts=[].slice.call(document.querySelectorAll('#group-servers .group-server')).filter(c=>c.checked).map(c=>c.value);
+  const sites=[].slice.call(document.querySelectorAll('#group-sites .group-site')).filter(c=>c.checked).map(c=>c.value);
+  const recipients=collectRecipients('group-recipients');
+  const st=document.getElementById('group-status');
+  if(!name){st.textContent='Group name required';st.style.color='#ef4444';return;}
+  st.textContent='Saving...';st.style.color='#aaa';
+  const url=API+'/api/v1/alert-groups'+(editingGroupId?('/'+editingGroupId):'');
+  const method=editingGroupId?'PUT':'POST';
+  const d=await fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:JSON.stringify({name,enabled,hosts,sites,recipients})}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  if(d.error){st.textContent='Error: '+d.error;st.style.color='#ef4444';return;}
+  editingGroupId=(d.group&&d.group.id)||editingGroupId;
+  st.textContent='Saved'+(d.synced?' \u00b7 routing updated':' \u00b7 sync issue: '+(d.message||''));st.style.color=d.synced?'#22c55e':'#f59e0b';
+  loadGroups();
+}
+async function deleteGroup(){
+  if(!editingGroupId||!confirm('Delete this alert group? Servers are not affected.'))return;
+  await fetch(API+'/api/v1/alert-groups/'+editingGroupId,{method:'DELETE'}).catch(()=>{});
+  editingGroupId=null;loadGroups();
+}
+</script></body></html>

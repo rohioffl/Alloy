@@ -1,0 +1,116 @@
+/* Zentra — full login screen theme for Grafana OSS */
+
+body.login-page,
+body.login-page.theme-dark {
+  background: #050a14 !important;
+}
+
+/* Full-page background (overrides default Grafana purple gradient SVG) */
+body.login-page main > div::before {
+  background: url("/public/custom/login-background-dark.svg") center center / cover no-repeat fixed !important;
+  opacity: 1 !important;
+}
+
+/* Login card */
+body.login-page .login-content-box {
+  background: rgba(7, 17, 31, 0.88) !important;
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid rgba(34, 211, 238, 0.22) !important;
+  border-radius: 16px !important;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(14, 116, 144, 0.12),
+    0 0 48px rgba(14, 116, 144, 0.12) !important;
+  padding: 44px 40px 36px !important;
+  max-width: 440px !important;
+}
+
+/* Logo */
+body.login-page .login-branding,
+body.login-page .login-branding img,
+body.login-page img[alt="Zentra"] {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+body.login-page .login-branding img,
+body.login-page img[alt="Zentra"] {
+  max-height: 130px !important;
+  width: auto !important;
+  margin: 0 auto 20px !important;
+  display: block !important;
+  filter: drop-shadow(0 8px 24px rgba(14, 116, 144, 0.25));
+}
+
+/* Heading */
+body.login-page .login-content-box h1 {
+  color: #e5eefb !important;
+  font-weight: 600 !important;
+  font-size: 1.45rem !important;
+  letter-spacing: -0.02em !important;
+  margin: 0 0 28px !important;
+  text-align: center !important;
+}
+
+/* Labels */
+body.login-page .login-content-box label {
+  color: #9fb3ca !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+}
+
+/* Inputs */
+body.login-page .login-content-box input[type="text"],
+body.login-page .login-content-box input[type="password"],
+body.login-page .login-content-box input[type="email"] {
+  background: rgba(11, 23, 38, 0.95) !important;
+  border: 1px solid #1d3550 !important;
+  border-radius: 8px !important;
+  color: #e5eefb !important;
+  padding: 10px 12px !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25) !important;
+}
+
+body.login-page .login-content-box input:focus {
+  border-color: #22d3ee !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.18) !important;
+}
+
+body.login-page .login-content-box input::placeholder {
+  color: #5c7a99 !important;
+}
+
+/* Login button */
+body.login-page .login-content-box button[type="submit"] {
+  background: linear-gradient(135deg, #0c4a6e 0%, #0e7490 45%, #0891b2 100%) !important;
+  border: 1px solid rgba(34, 211, 238, 0.35) !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em !important;
+  box-shadow: 0 4px 16px rgba(14, 116, 144, 0.35) !important;
+}
+
+body.login-page .login-content-box button[type="submit"]:hover {
+  filter: brightness(1.08) !important;
+}
+
+/* Forgot password */
+body.login-page .login-content-box a {
+  color: #8bdcff !important;
+  font-size: 13px !important;
+}
+
+body.login-page .login-content-box a:hover {
+  color: #22d3ee !important;
+}
+
+/* Hide default Grafana footer on login */
+body.login-page footer {
+  display: none !important;
+}
+
+@import url("/public/custom/zentra-sidebar.css");

@@ -1,0 +1,1040 @@
+{
+  "uid": "alloy-fleet",
+  "title": "Fleet Overview - All Servers",
+  "tags": [
+    "fleet",
+    "overview",
+    "alloy",
+    "servers"
+  ],
+  "refresh": "30s",
+  "time": {
+    "from": "now-5m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "client",
+        "type": "query",
+        "label": "Client",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": false,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "query": {
+          "query": "label_values({__name__=~\"monitor_node_info|monitor_kuma_site_info\"}, client)",
+          "refId": "client"
+        }
+      },
+      {
+        "name": "account",
+        "type": "query",
+        "label": "Account",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": false,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "query": {
+          "query": "label_values({__name__=~\"monitor_node_info|monitor_kuma_site_info\",client=~\"$client\"}, account)",
+          "refId": "account"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "count(monitor_node_info{client=~\"$client\",account=~\"$account\"}) or on() vector(0)",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Servers",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "count(((((max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info)) * (1 + ((((((100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) >= bool 70) or ((max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) >= bool 70) or ((max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) >= bool 70) or ((max by (host) (rate(node_network_receive_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_receive_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m])) or on(host) (0 * monitor_node_info)) >= bool 1))) or on(host) (0 * (max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info)))) * (1 - (((((max by (host) ((label_replace(probe_success{job=\"blackbox\"}, \"port\", \"$1\", \"port\", \"(?:integrations/blackbox/)?(.+)\") * on(host,port) group_left() monitor_port_info) == bool 0) or on(host) (0 * monitor_node_info)) > bool 0) or ((count by (host) ((count_over_time(namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"}[1h]) > 0) unless on(host,groupname) (namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"} > 0)) or on(host) (0 * monitor_node_info)) > bool 0) or ((100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) >= bool 90) or ((max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) >= bool 90) or ((max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) >= bool 90) or ((max by (host) (rate(node_network_receive_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_receive_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m])) or on(host) (0 * monitor_node_info)) >= bool 10))) or on(host) (0 * (max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info)))))) + (2 * (((((max by (host) ((label_replace(probe_success{job=\"blackbox\"}, \"port\", \"$1\", \"port\", \"(?:integrations/blackbox/)?(.+)\") * on(host,port) group_left() monitor_port_info) == bool 0) or on(host) (0 * monitor_node_info)) > bool 0) or ((count by (host) ((count_over_time(namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"}[1h]) > 0) unless on(host,groupname) (namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"} > 0)) or on(host) (0 * monitor_node_info)) > bool 0) or ((100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) >= bool 90) or ((max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) >= bool 90) or ((max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) >= bool 90) or ((max by (host) (rate(node_network_receive_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_receive_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m])) or on(host) (0 * monitor_node_info)) >= bool 10))) or on(host) (0 * (max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info))))))) * on(host) group_left(client,account,name,ip) monitor_node_info{client=~\"$client\",account=~\"$account\"})) == 1) or on() vector(0)",
+          "refId": "A"
+        }
+      ],
+      "title": "Up",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "red",
+            "mode": "fixed"
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "count(((((max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info)) * (1 + ((((((100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) >= bool 70) or ((max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) >= bool 70) or ((max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) >= bool 70) or ((max by (host) (rate(node_network_receive_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_receive_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m])) or on(host) (0 * monitor_node_info)) >= bool 1))) or on(host) (0 * (max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info)))) * (1 - (((((max by (host) ((label_replace(probe_success{job=\"blackbox\"}, \"port\", \"$1\", \"port\", \"(?:integrations/blackbox/)?(.+)\") * on(host,port) group_left() monitor_port_info) == bool 0) or on(host) (0 * monitor_node_info)) > bool 0) or ((count by (host) ((count_over_time(namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"}[1h]) > 0) unless on(host,groupname) (namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"} > 0)) or on(host) (0 * monitor_node_info)) > bool 0) or ((100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) >= bool 90) or ((max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) >= bool 90) or ((max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) >= bool 90) or ((max by (host) (rate(node_network_receive_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_receive_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m])) or on(host) (0 * monitor_node_info)) >= bool 10))) or on(host) (0 * (max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info)))))) + (2 * (((((max by (host) ((label_replace(probe_success{job=\"blackbox\"}, \"port\", \"$1\", \"port\", \"(?:integrations/blackbox/)?(.+)\") * on(host,port) group_left() monitor_port_info) == bool 0) or on(host) (0 * monitor_node_info)) > bool 0) or ((count by (host) ((count_over_time(namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"}[1h]) > 0) unless on(host,groupname) (namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"} > 0)) or on(host) (0 * monitor_node_info)) > bool 0) or ((100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) >= bool 90) or ((max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) >= bool 90) or ((max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) >= bool 90) or ((max by (host) (rate(node_network_receive_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_receive_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m])) or on(host) (0 * monitor_node_info)) >= bool 10))) or on(host) (0 * (max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info))))))) * on(host) group_left(client,account,name,ip) monitor_node_info{client=~\"$client\",account=~\"$account\"})) == 0) or on() vector(0)",
+          "refId": "A"
+        }
+      ],
+      "title": "Down",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "red",
+            "mode": "fixed"
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "count(((((max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info)) * (1 + ((((((100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) >= bool 70) or ((max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) >= bool 70) or ((max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) >= bool 70) or ((max by (host) (rate(node_network_receive_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_receive_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m])) or on(host) (0 * monitor_node_info)) >= bool 1))) or on(host) (0 * (max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info)))) * (1 - (((((max by (host) ((label_replace(probe_success{job=\"blackbox\"}, \"port\", \"$1\", \"port\", \"(?:integrations/blackbox/)?(.+)\") * on(host,port) group_left() monitor_port_info) == bool 0) or on(host) (0 * monitor_node_info)) > bool 0) or ((count by (host) ((count_over_time(namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"}[1h]) > 0) unless on(host,groupname) (namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"} > 0)) or on(host) (0 * monitor_node_info)) > bool 0) or ((100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) >= bool 90) or ((max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) >= bool 90) or ((max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) >= bool 90) or ((max by (host) (rate(node_network_receive_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_receive_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m])) or on(host) (0 * monitor_node_info)) >= bool 10))) or on(host) (0 * (max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info)))))) + (2 * (((((max by (host) ((label_replace(probe_success{job=\"blackbox\"}, \"port\", \"$1\", \"port\", \"(?:integrations/blackbox/)?(.+)\") * on(host,port) group_left() monitor_port_info) == bool 0) or on(host) (0 * monitor_node_info)) > bool 0) or ((count by (host) ((count_over_time(namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"}[1h]) > 0) unless on(host,groupname) (namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"} > 0)) or on(host) (0 * monitor_node_info)) > bool 0) or ((100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) >= bool 90) or ((max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) >= bool 90) or ((max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) >= bool 90) or ((max by (host) (rate(node_network_receive_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_receive_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m])) or on(host) (0 * monitor_node_info)) >= bool 10))) or on(host) (0 * (max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info))))))) * on(host) group_left(client,account,name,ip) monitor_node_info{client=~\"$client\",account=~\"$account\"})) == 3) or on() vector(0)",
+          "refId": "A"
+        }
+      ],
+      "title": "Critical Servers",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "count(((((max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info)) * (1 + ((((((100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) >= bool 70) or ((max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) >= bool 70) or ((max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) >= bool 70) or ((max by (host) (rate(node_network_receive_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_receive_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m])) or on(host) (0 * monitor_node_info)) >= bool 1))) or on(host) (0 * (max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info)))) * (1 - (((((max by (host) ((label_replace(probe_success{job=\"blackbox\"}, \"port\", \"$1\", \"port\", \"(?:integrations/blackbox/)?(.+)\") * on(host,port) group_left() monitor_port_info) == bool 0) or on(host) (0 * monitor_node_info)) > bool 0) or ((count by (host) ((count_over_time(namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"}[1h]) > 0) unless on(host,groupname) (namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"} > 0)) or on(host) (0 * monitor_node_info)) > bool 0) or ((100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) >= bool 90) or ((max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) >= bool 90) or ((max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) >= bool 90) or ((max by (host) (rate(node_network_receive_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_receive_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m])) or on(host) (0 * monitor_node_info)) >= bool 10))) or on(host) (0 * (max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info)))))) + (2 * (((((max by (host) ((label_replace(probe_success{job=\"blackbox\"}, \"port\", \"$1\", \"port\", \"(?:integrations/blackbox/)?(.+)\") * on(host,port) group_left() monitor_port_info) == bool 0) or on(host) (0 * monitor_node_info)) > bool 0) or ((count by (host) ((count_over_time(namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"}[1h]) > 0) unless on(host,groupname) (namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"} > 0)) or on(host) (0 * monitor_node_info)) > bool 0) or ((100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) >= bool 90) or ((max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) >= bool 90) or ((max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) >= bool 90) or ((max by (host) (rate(node_network_receive_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_receive_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m])) or on(host) (0 * monitor_node_info)) >= bool 10))) or on(host) (0 * (max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info))))))) * on(host) group_left(client,account,name,ip) monitor_node_info{client=~\"$client\",account=~\"$account\"})) == 2) or on() vector(0)",
+          "refId": "A"
+        }
+      ],
+      "title": "Warning Servers",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "purple",
+            "mode": "fixed"
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "count(count by (client) ({__name__=~\"monitor_node_info|monitor_kuma_site_info\",client=~\"$client\",account=~\"$account\"})) or on() vector(0)",
+          "refId": "A"
+        }
+      ],
+      "title": "Clients",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "All servers with live health status (client/account from the central registry). Click a host to drill down.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "red",
+                        "index": 0,
+                        "text": "DOWN"
+                      },
+                      "1": {
+                        "color": "green",
+                        "index": 1,
+                        "text": "UP"
+                      },
+                      "2": {
+                        "color": "orange",
+                        "index": 2,
+                        "text": "WARNING"
+                      },
+                      "3": {
+                        "color": "red",
+                        "index": 3,
+                        "text": "CRITICAL"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "gradient",
+                  "type": "gauge"
+                }
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 70
+                    },
+                    {
+                      "color": "red",
+                      "value": 90
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Memory %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "gradient",
+                  "type": "gauge"
+                }
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 70
+                    },
+                    {
+                      "color": "red",
+                      "value": 90
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Disk %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "gradient",
+                  "type": "gauge"
+                }
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 70
+                    },
+                    {
+                      "color": "red",
+                      "value": 90
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Load"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Uptime"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Host"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Drill down to $__value.raw",
+                    "url": "/d/alloy-drilldown/server-drill-down-alloy?var-host=${__value.raw}&var-client=All&var-account=All"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Disk Used GB"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Disk Total GB"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 10,
+      "options": {
+        "cellHeight": "md",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Status"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "(((max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info)) * (1 + ((((((100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) >= bool 70) or ((max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) >= bool 70) or ((max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) >= bool 70) or ((max by (host) (rate(node_network_receive_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_receive_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m])) or on(host) (0 * monitor_node_info)) >= bool 1))) or on(host) (0 * (max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info)))) * (1 - (((((max by (host) ((label_replace(probe_success{job=\"blackbox\"}, \"port\", \"$1\", \"port\", \"(?:integrations/blackbox/)?(.+)\") * on(host,port) group_left() monitor_port_info) == bool 0) or on(host) (0 * monitor_node_info)) > bool 0) or ((count by (host) ((count_over_time(namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"}[1h]) > 0) unless on(host,groupname) (namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"} > 0)) or on(host) (0 * monitor_node_info)) > bool 0) or ((100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) >= bool 90) or ((max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) >= bool 90) or ((max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) >= bool 90) or ((max by (host) (rate(node_network_receive_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_receive_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m])) or on(host) (0 * monitor_node_info)) >= bool 10))) or on(host) (0 * (max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info)))))) + (2 * (((((max by (host) ((label_replace(probe_success{job=\"blackbox\"}, \"port\", \"$1\", \"port\", \"(?:integrations/blackbox/)?(.+)\") * on(host,port) group_left() monitor_port_info) == bool 0) or on(host) (0 * monitor_node_info)) > bool 0) or ((count by (host) ((count_over_time(namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"}[1h]) > 0) unless on(host,groupname) (namedprocess_namegroup_num_procs{job=\"integrations/unix\",groupname=~\"alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld\"} > 0)) or on(host) (0 * monitor_node_info)) > bool 0) or ((100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) >= bool 90) or ((max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) >= bool 90) or ((max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) >= bool 90) or ((max by (host) (rate(node_network_receive_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_errs_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_receive_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m]) + rate(node_network_transmit_drop_total{job=\"integrations/unix\",device!~\"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*\"}[5m])) or on(host) (0 * monitor_node_info)) >= bool 10))) or on(host) (0 * (max by (host) (up{job=\"integrations/unix\"}) or on(host) (0 * monitor_node_info))))))) * on(host) group_left(client,account,name,ip) monitor_node_info{client=~\"$client\",account=~\"$account\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "Status"
+        },
+        {
+          "expr": "(100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) * on(host) group_left() monitor_node_info{client=~\"$client\",account=~\"$account\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "CPU"
+        },
+        {
+          "expr": "(max by (host) ((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)) * on(host) group_left() monitor_node_info{client=~\"$client\",account=~\"$account\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "Memory"
+        },
+        {
+          "expr": "(max by (host) (100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100))) * on(host) group_left() monitor_node_info{client=~\"$client\",account=~\"$account\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "Disk"
+        },
+        {
+          "expr": "(sum by (host) (node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} - node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) / 1024 / 1024 / 1024) * on(host) group_left() monitor_node_info{client=~\"$client\",account=~\"$account\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "DiskUsed"
+        },
+        {
+          "expr": "(sum by (host) (node_filesystem_size_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) / 1024 / 1024 / 1024) * on(host) group_left() monitor_node_info{client=~\"$client\",account=~\"$account\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "DiskTotal"
+        },
+        {
+          "expr": "(max by (host) (node_load1{job=\"integrations/unix\"})) * on(host) group_left() monitor_node_info{client=~\"$client\",account=~\"$account\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "Load"
+        },
+        {
+          "expr": "(time() - max by (host) (node_boot_time_seconds{job=\"integrations/unix\"})) * on(host) group_left() monitor_node_info{client=~\"$client\",account=~\"$account\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "Uptime"
+        }
+      ],
+      "title": "Server Status",
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "host",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Time 4": true,
+              "Time 5": true,
+              "Time 6": true,
+              "__name__": true,
+              "hostname": true,
+              "instance": true,
+              "job": true,
+              "Time 7": true,
+              "Time 8": true
+            },
+            "indexByName": {
+              "host": 0,
+              "name": 1,
+              "ip": 2,
+              "client": 3,
+              "account": 4,
+              "Value #Status": 5,
+              "Value #CPU": 6,
+              "Value #Memory": 7,
+              "Value #Disk": 8,
+              "Value #DiskUsed": 9,
+              "Value #DiskTotal": 10,
+              "Value #Load": 11,
+              "Value #Uptime": 12
+            },
+            "renameByName": {
+              "host": "Host",
+              "name": "Display Name",
+              "ip": "IP",
+              "client": "Client",
+              "account": "Account",
+              "Value #Status": "Status",
+              "Value #CPU": "CPU %",
+              "Value #Memory": "Memory %",
+              "Value #Disk": "Disk %",
+              "Value #Load": "Load",
+              "Value #Uptime": "Uptime",
+              "Value #DiskUsed": "Disk Used GB",
+              "Value #DiskTotal": "Disk Total GB"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 18
+      },
+      "id": 30,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "count(monitor_kuma_site_info{client=~\"$client\",account=~\"$account\"}) or on() vector(0)",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Sites",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 18
+      },
+      "id": 31,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "count(((min by (monitor_name) (monitor_status{job=\"uptime-kuma\"}) * on(monitor_name) group_left(client,account) monitor_kuma_site_info{client=~\"$client\",account=~\"$account\"}) == 1)) or on() vector(0)",
+          "refId": "A"
+        }
+      ],
+      "title": "Sites Up",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "red",
+            "mode": "fixed"
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 18
+      },
+      "id": 32,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "count(((min by (monitor_name) (monitor_status{job=\"uptime-kuma\"}) * on(monitor_name) group_left(client,account) monitor_kuma_site_info{client=~\"$client\",account=~\"$account\"}) == 0)) or on() vector(0)",
+          "refId": "A"
+        }
+      ],
+      "title": "Sites Down",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Uptime Kuma sites with client/account assignments from the central registry.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "red",
+                        "index": 0,
+                        "text": "DOWN"
+                      },
+                      "1": {
+                        "color": "green",
+                        "index": 1,
+                        "text": "UP"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Response"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Site"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open site dashboard",
+                    "url": "/d/uptime-kuma-site/uptime-kuma-site?var-monitor=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "id": 40,
+      "options": {
+        "cellHeight": "md",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Status"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "(min by (monitor_name) (monitor_status{job=\"uptime-kuma\"}) * on(monitor_name) group_left(name,client,account,target,monitor_type) monitor_kuma_site_info{client=~\"$client\",account=~\"$account\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "Status"
+        },
+        {
+          "expr": "(avg by (monitor_name) (monitor_response_time{job=\"uptime-kuma\"}) * on(monitor_name) group_left() monitor_kuma_site_info{client=~\"$client\",account=~\"$account\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "Response"
+        }
+      ],
+      "title": "Uptime Kuma Site Status",
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "monitor_name",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time 1": true,
+              "Time 2": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "site": true
+            },
+            "indexByName": {
+              "monitor_name": 0,
+              "name": 1,
+              "client": 2,
+              "account": 3,
+              "monitor_type": 4,
+              "target": 5,
+              "Value #Status": 6,
+              "Value #Response": 7
+            },
+            "renameByName": {
+              "monitor_name": "Site",
+              "name": "Display Name",
+              "client": "Client",
+              "account": "Account",
+              "monitor_type": "Type",
+              "target": "Target",
+              "Value #Status": "Status",
+              "Value #Response": "Response"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "type": "alertlist",
+      "id": 20,
+      "title": "Active Alerts (Servers + Sites)",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "options": {
+        "alertInstanceLabelFilter": "",
+        "dashboardAlerts": false,
+        "groupMode": "default",
+        "maxItems": 30,
+        "sortOrder": 3,
+        "stateFilter": {
+          "firing": true,
+          "pending": true,
+          "error": true,
+          "noData": false,
+          "normal": false
+        },
+        "viewMode": "list"
+      },
+      "transparent": false
+    }
+  ],
+  "overwrite": true
+}

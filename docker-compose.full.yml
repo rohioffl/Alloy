@@ -1,0 +1,252 @@
+version: '3.8'
+
+# Complete Alloy Monitoring Platform Stack
+# Includes: Grafana, Prometheus, Central API, Uptime Kuma
+
+services:
+  # ============================================================================
+  # Prometheus - Metrics Storage
+  # ============================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    user: "0:0"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--web.enable-remote-write-receiver'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/alerts:/etc/prometheus/alerts:ro
+      - prometheus-data:/prometheus
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # Grafana - Visualization & Dashboards
+  # ============================================================================
+  grafana:
+    build:
+      context: .
+      dockerfile: Dockerfile.grafana
+    image: grafana-alloy-branded:13.0.1
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      # Server settings
+      GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:-http://localhost:3000}"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+
+      # Branding (OSS limited - logo customization done in Dockerfile)
+      GF_BRANDING_APP_TITLE: "Zentra"
+      GF_BRANDING_COMPANY_NAME: "Ankercloud"
+
+      # Note: GF_WHITE_LABELING_* requires Enterprise license
+      # OSS approach: Custom logos replaced in Dockerfile.grafana
+
+      # Security
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASS:-admin}"
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      # Required for HTML text panels that embed the Port Monitor API iframes
+      GF_PANELS_DISABLE_SANITIZE_HTML: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+
+      # Database (SQLite default, can switch to Postgres)
+      GF_DATABASE_TYPE: "${GF_DATABASE_TYPE:-sqlite3}"
+      GF_DATABASE_HOST: "${GF_DATABASE_HOST:-}"
+      GF_DATABASE_NAME: "${GF_DATABASE_NAME:-grafana}"
+      GF_DATABASE_USER: "${GF_DATABASE_USER:-}"
+      GF_DATABASE_PASSWORD: "${GF_DATABASE_PASSWORD:-}"
+
+      # Email/SMTP (AWS SES — port 587 + STARTTLS)
+      GF_SMTP_ENABLED: "${SMTP_ENABLED:-false}"
+      GF_SMTP_HOST: "${SMTP_HOST:-email-smtp.ap-south-1.amazonaws.com:587}"
+      GF_SMTP_USER: "${SMTP_USER:-}"
+      GF_SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
+      GF_SMTP_FROM_ADDRESS: "${SMTP_FROM:-alerts@yourdomain.com}"
+      GF_SMTP_FROM_NAME: "${SMTP_FROM_NAME:-Zentra Monitoring}"
+      GF_SMTP_STARTTLS_POLICY: "MandatoryStartTLS"
+
+      # Plugins
+      GF_INSTALL_PLUGINS: "yesoreyeram-infinity-datasource"
+
+      # Provisioning
+      GF_PATHS_PROVISIONING: "/etc/grafana/provisioning"
+
+      # Analytics
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+
+      # Users
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_DEFAULT_THEME: "dark"
+      GF_EXPLORE_ENABLED: "false"
+
+      # Logging
+      GF_LOG_LEVEL: "info"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/etc/grafana/dashboards:ro
+      - ./alert:/etc/grafana/custom/alert:ro
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # Central Monitoring API - Control Plane
+  # ============================================================================
+  monitor-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: port-monitor-api
+    restart: unless-stopped
+    environment:
+      # API Configuration
+      MONITOR_HOST: "0.0.0.0"
+      MONITOR_PORT: "9099"
+      MONITOR_PUBLIC_URL: "${MONITOR_PUBLIC_URL:-http://localhost:9099}"
+
+      # Prometheus & Grafana URLs (from Docker network)
+      MONITOR_PROMETHEUS_URL: "http://prometheus:9090"
+      MONITOR_GRAFANA_URL: "${GRAFANA_ROOT_URL:-http://grafana:3000}"
+
+      # Admin credentials for Grafana provisioning
+      MONITOR_GRAFANA_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      MONITOR_GRAFANA_ADMIN_PASS: "${GRAFANA_ADMIN_PASS:-admin}"
+
+      # Security tokens
+      MONITOR_INSTALL_TOKEN: "${MONITOR_INSTALL_TOKEN:-change-me-install-token}"
+      MONITOR_API_KEY: "${MONITOR_API_KEY:-change-me-api-key}"
+
+      # Alert receiver
+      MONITOR_ADMIN_RECEIVER: "email-zentra"
+
+      # Data & Config paths (container paths)
+      MONITOR_DATA_DIR: "/var/lib/port-monitor"
+      MONITOR_CONFIG: "/etc/port-monitor/config.json"
+    ports:
+      - "9099:9099"
+    volumes:
+      - monitor-data:/var/lib/port-monitor
+      - monitor-config:/etc/port-monitor
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+      - grafana
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9099/health', timeout=2).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ============================================================================
+  # Uptime Kuma - External Website Monitoring (Optional)
+  # ============================================================================
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - uptime-kuma-data:/app/data
+    networks:
+      - monitoring
+    environment:
+      - UPTIME_KUMA_PORT=3001
+    healthcheck:
+      test: ["CMD-SHELL", "node extra/healthcheck.js"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # Optional: PostgreSQL for Grafana (instead of SQLite)
+  # ============================================================================
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: grafana-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: grafana
+  #     POSTGRES_USER: grafana
+  #     POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-changeme}"
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   networks:
+  #     - monitoring
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U grafana"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # ============================================================================
+  # Optional: Alertmanager for advanced alert routing
+  # ============================================================================
+  # alertmanager:
+  #   image: prom/alertmanager:latest
+  #   container_name: alertmanager
+  #   restart: unless-stopped
+  #   command:
+  #     - '--config.file=/etc/alertmanager/alertmanager.yml'
+  #     - '--storage.path=/alertmanager'
+  #   ports:
+  #     - "9093:9093"
+  #   volumes:
+  #     - ./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+  #     - alertmanager-data:/alertmanager
+  #   networks:
+  #     - monitoring
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  monitoring:
+    driver: bridge
+    name: monitoring-network
+
+# ============================================================================
+# Volumes
+# ============================================================================
+volumes:
+  prometheus-data:
+    name: prometheus-data
+  grafana-data:
+    name: grafana-data
+  monitor-data:
+    name: monitor-data
+  monitor-config:
+    name: monitor-config
+  uptime-kuma-data:
+    name: uptime-kuma-data
+  # postgres-data:
+  #   name: postgres-data
+  # alertmanager-data:
+  #   name: alertmanager-data

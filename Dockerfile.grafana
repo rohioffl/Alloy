@@ -1,0 +1,69 @@
+# Zentra Monitoring - Rebranded Grafana
+FROM grafana/grafana:13.0.1
+
+USER root
+
+COPY docker/grafana/grafana-zentra.ini /etc/grafana/grafana.ini
+COPY branding/generated /tmp/branding
+COPY branding/login-background-dark.svg /tmp/login-background-dark.svg
+COPY branding/zentra-login.css /tmp/zentra-login.css
+COPY branding/zentra-sidebar.css /tmp/zentra-sidebar.css
+
+# Replace logos in all locations Grafana 13 reads from
+RUN set -e; \
+    for f in /usr/share/grafana/public/build/static/img/grafana_icon.*.svg; do \
+      [ -f "$f" ] && cp /tmp/branding/grafana_icon.svg "$f"; \
+    done; \
+    for f in /usr/share/grafana/public/build/static/img/grafana_text_logo_dark.*.svg; do \
+      [ -f "$f" ] && cp /tmp/branding/grafana_text_logo_dark.svg "$f"; \
+    done; \
+    for f in /usr/share/grafana/public/build/static/img/grafana_text_logo_light.*.svg; do \
+      [ -f "$f" ] && cp /tmp/branding/grafana_text_logo_light.svg "$f"; \
+    done; \
+    for f in /usr/share/grafana/public/build/static/img/g8_login_dark.*.svg; do \
+      [ -f "$f" ] && cp /tmp/login-background-dark.svg "$f"; \
+    done; \
+    for f in /usr/share/grafana/public/build/static/img/g8_login_light.*.svg; do \
+      [ -f "$f" ] && cp /tmp/login-background-dark.svg "$f"; \
+    done; \
+    cp /tmp/login-background-dark.svg /usr/share/grafana/public/img/login_background_dark.svg; \
+    cp /tmp/login-background-dark.svg /usr/share/grafana/public/img/login_background_light.svg; \
+    cp /tmp/login-background-dark.svg /usr/share/grafana/public/img/g8_login_dark.svg; \
+    cp /tmp/login-background-dark.svg /usr/share/grafana/public/img/g8_login_light.svg; \
+    cp /tmp/branding/grafana_icon.svg /usr/share/grafana/public/img/grafana_icon.svg; \
+    cp /tmp/branding/grafana_typelogo.svg /usr/share/grafana/public/img/grafana_typelogo.svg; \
+    cp /tmp/branding/grafana_text_logo_dark.svg /usr/share/grafana/public/img/grafana_text_logo-dark.svg; \
+    cp /tmp/branding/grafana_text_logo_dark.svg /usr/share/grafana/public/img/grafana_text_logo_dark.svg; \
+    cp /tmp/branding/grafana_text_logo_light.svg /usr/share/grafana/public/img/grafana_text_logo.svg; \
+    cp /tmp/branding/grafana_text_logo_light.svg /usr/share/grafana/public/img/grafana_text_logo_light.svg; \
+    cp /tmp/branding/grafana_icon.svg /usr/share/grafana/public/build/img/grafana_icon.svg; \
+    cp /tmp/branding/grafana_typelogo.svg /usr/share/grafana/public/build/img/grafana_typelogo.svg; \
+    cp /tmp/branding/grafana_text_logo_dark.svg /usr/share/grafana/public/build/img/grafana_text_logo-dark.svg; \
+    cp /tmp/branding/grafana_text_logo_light.svg /usr/share/grafana/public/build/img/grafana_text_logo-light.svg; \
+    cp /tmp/branding/fav32.png /usr/share/grafana/public/img/fav32.png; \
+    cp /tmp/branding/fav16.png /usr/share/grafana/public/img/fav16.png; \
+    cp /tmp/branding/apple-touch-icon.png /usr/share/grafana/public/img/apple-touch-icon.png; \
+    rm -rf /tmp/branding; \
+    mkdir -p /usr/share/grafana/public/custom && \
+    cp /tmp/login-background-dark.svg /usr/share/grafana/public/custom/login-background-dark.svg && \
+    cp /tmp/zentra-login.css /usr/share/grafana/public/custom/zentra.css && \
+    cp /tmp/zentra-sidebar.css /usr/share/grafana/public/custom/zentra-sidebar.css && \
+    rm -f /tmp/login-background-dark.svg /tmp/zentra-login.css /tmp/zentra-sidebar.css
+
+# UI text: Zentra instead of Grafana
+RUN find /usr/share/grafana/public/views -type f -name "*.html" -exec sed -i 's/Grafana/Zentra/g' {} \; 2>/dev/null || true; \
+    sed -i 's/<title>\[\[\.AppTitle\]\]<\/title>/<title>Zentra<\/title>/g' /usr/share/grafana/public/views/index.html; \
+    if [ -f /usr/share/grafana/public/manifest.json ]; then \
+      sed -i 's/"name": "Grafana"/"name": "Zentra"/g' /usr/share/grafana/public/manifest.json; \
+      sed -i 's/"short_name": "Grafana"/"short_name": "Zentra"/g' /usr/share/grafana/public/manifest.json; \
+    fi; \
+    find /usr/share/grafana/public/build -type f -name "*.js" -exec sed -i \
+      's/Welcome to Grafana/Welcome to Zentra/g; s/"Grafana"/"Zentra"/g; s/'\''Grafana'\''/'\''Zentra'\''/g' {} \; 2>/dev/null || true; \
+    grep -q 'zentra.css' /usr/share/grafana/public/views/index.html || \
+      sed -i 's|</head>|<link rel="stylesheet" href="/public/custom/zentra.css" /></head>|' /usr/share/grafana/public/views/index.html; \
+    chmod -R 755 /usr/share/grafana/public/img/ /usr/share/grafana/public/build/img/ /usr/share/grafana/public/build/static/img/ /usr/share/grafana/public/custom/
+
+USER 472
+
+LABEL maintainer="Ankercloud"
+LABEL description="Zentra Monitoring - Grafana 13 with custom Zentra logos"

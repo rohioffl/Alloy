@@ -1,0 +1,24 @@
+services:
+  monitor-api:
+    build: .
+    container_name: port-monitor-api
+    restart: unless-stopped
+    ports:
+      - "9099:9099"
+    environment:
+      MONITOR_PUBLIC_URL: "http://localhost:9099"
+      MONITOR_PROMETHEUS_URL: "http://host.docker.internal:9090"
+      MONITOR_GRAFANA_URL: "http://host.docker.internal:3000"
+      MONITOR_GRAFANA_ADMIN_USER: "admin"
+      MONITOR_GRAFANA_ADMIN_PASS: "admin"
+      MONITOR_INSTALL_TOKEN: "change-me"
+      MONITOR_API_KEY: "change-me"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - monitor-data:/var/lib/port-monitor
+      - monitor-config:/etc/port-monitor
+
+volumes:
+  monitor-data:
+  monitor-config:

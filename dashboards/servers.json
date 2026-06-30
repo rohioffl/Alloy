@@ -1,0 +1,36 @@
+{
+  "uid": "alloy-servers",
+  "title": "All Servers",
+  "tags": [
+    "servers",
+    "inventory",
+    "alloy",
+    "admin"
+  ],
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "schemaVersion": 42,
+  "panels": [
+    {
+      "gridPos": {
+        "h": 24,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "content": "<iframe src=\"https://zentra.ankercloud.com/monitor-api/inventory\" style=\"width:100%;height:calc(100vh - 80px);min-height:900px;border:none;\"></iframe>",
+        "mode": "html"
+      },
+      "title": "",
+      "transparent": true,
+      "type": "text"
+    }
+  ],
+  "overwrite": true
+}

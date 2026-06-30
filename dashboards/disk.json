@@ -1,0 +1,534 @@
+{
+  "uid": "alloy-dd-disk",
+  "title": "Server Drill-Down \u00b7 Disks (Alloy)",
+  "tags": [
+    "disk",
+    "drilldown",
+    "server",
+    "alloy"
+  ],
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "yesoreyeram-infinity-datasource",
+          "uid": "P79940EC37D9FBFF2"
+        },
+        "includeAll": true,
+        "label": "Client",
+        "name": "client",
+        "query": {
+          "infinityQuery": {
+            "refId": "variable",
+            "source": "url",
+            "type": "json",
+            "url": "/api/v1/variables/clients"
+          },
+          "queryType": "infinity",
+          "type": "infinity"
+        },
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "yesoreyeram-infinity-datasource",
+          "uid": "P79940EC37D9FBFF2"
+        },
+        "includeAll": true,
+        "label": "Account",
+        "name": "account",
+        "query": {
+          "infinityQuery": {
+            "refId": "variable",
+            "source": "url",
+            "type": "json",
+            "url": "/api/v1/variables/accounts?client=${client}"
+          },
+          "queryType": "infinity",
+          "type": "infinity"
+        },
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "datasource": {
+          "type": "yesoreyeram-infinity-datasource",
+          "uid": "P79940EC37D9FBFF2"
+        },
+        "includeAll": false,
+        "label": "Host",
+        "name": "host",
+        "query": {
+          "infinityQuery": {
+            "refId": "variable",
+            "source": "url",
+            "type": "json",
+            "url": "/api/v1/variables/hosts?client=${client}&account=${account}"
+          },
+          "queryType": "infinity",
+          "type": "infinity"
+        },
+        "refresh": 1,
+        "sort": 0,
+        "type": "query"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "options": {
+        "content": "<div style=\"display:flex;align-items:flex-end;gap:24px;padding:12px 18px 0;border-bottom:1px solid rgba(255,255,255,0.08);font-family:Inter,system-ui,sans-serif;font-size:14px;\"><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 10px;\" href=\"/d/alloy-drilldown/server-drill-down-alloy?var-client=${client}&var-account=${account}&var-host=${host}&${__url_time_range}\">Summary</a><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 10px;\" href=\"/d/alloy-dd-proc/server-drill-down-processes-alloy?var-client=${client}&var-account=${account}&var-host=${host}&${__url_time_range}\">Processes</a><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 10px;\" href=\"/d/alloy-dd-port/server-drill-down-ports-alloy?var-client=${client}&var-account=${account}&var-host=${host}&${__url_time_range}\">Ports</a><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 10px;\" href=\"/d/alloy-dd-cpu/server-drill-down-cpu-alloy?var-client=${client}&var-account=${account}&var-host=${host}&${__url_time_range}\">CPU</a><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 10px;\" href=\"/d/alloy-dd-mem/server-drill-down-memory-alloy?var-client=${client}&var-account=${account}&var-host=${host}&${__url_time_range}\">Memory</a><a style=\"color:#fff;text-decoration:none;padding:6px 2px 10px;border-bottom:2px solid #f59e0b;font-weight:600;\">Disks</a><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 10px;\" href=\"/d/alloy-dd-net/server-drill-down-network-alloy?var-client=${client}&var-account=${account}&var-host=${host}&${__url_time_range}\">Network</a></div>",
+        "mode": "html"
+      },
+      "title": "",
+      "transparent": true,
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Usage %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "gradient",
+                  "type": "gauge"
+                }
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 70
+                    },
+                    {
+                      "color": "red",
+                      "value": 90
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Used GB"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total GB"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 3
+      },
+      "id": 1,
+      "options": {
+        "cellHeight": "md",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Usage %"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "100 - (node_filesystem_avail_bytes{host=\"$host\",job=\"integrations/unix\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / node_filesystem_size_bytes{host=\"$host\",job=\"integrations/unix\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) * 100",
+          "format": "table",
+          "instant": true,
+          "refId": "Usage"
+        },
+        {
+          "expr": "(node_filesystem_size_bytes{host=\"$host\",job=\"integrations/unix\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} - node_filesystem_avail_bytes{host=\"$host\",job=\"integrations/unix\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"}) / 1024 / 1024 / 1024",
+          "format": "table",
+          "instant": true,
+          "refId": "Used"
+        },
+        {
+          "expr": "node_filesystem_size_bytes{host=\"$host\",job=\"integrations/unix\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs\",mountpoint!~\"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)\"} / 1024 / 1024 / 1024",
+          "format": "table",
+          "instant": true,
+          "refId": "Total"
+        }
+      ],
+      "title": "Filesystems \u2014 Usage %",
+      "type": "table",
+      "description": "Every real mounted filesystem reported by node exporter. New mounted disks appear automatically after the next scrape.",
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "mountpoint",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "__name__": true,
+              "host": true,
+              "instance": true,
+              "job": true,
+              "device 2": true,
+              "device 3": true,
+              "fstype 2": true,
+              "fstype 3": true
+            },
+            "indexByName": {
+              "mountpoint": 0,
+              "device": 1,
+              "fstype": 2,
+              "Value #Usage": 3,
+              "Value #Used": 4,
+              "Value #Total": 5
+            },
+            "renameByName": {
+              "mountpoint": "Mount",
+              "device": "Device",
+              "fstype": "Type",
+              "Value #Usage": "Usage %",
+              "Value #Used": "Used GB",
+              "Value #Total": "Total GB"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 15,
+            "lineWidth": 2
+          },
+          "unit": "Bps"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 11
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(node_disk_read_bytes_total{host=\"$host\",job=\"integrations/unix\",device!~\"dm-.*|loop.*\"}[5m])",
+          "legendFormat": "read {{device}}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(node_disk_written_bytes_total{host=\"$host\",job=\"integrations/unix\",device!~\"dm-.*|loop.*\"}[5m])",
+          "legendFormat": "write {{device}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Disk Read / Write Throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "iops"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 11
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(node_disk_reads_completed_total{host=\"$host\",job=\"integrations/unix\",device!~\"dm-.*|loop.*\"}[5m])",
+          "legendFormat": "reads {{device}}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(node_disk_writes_completed_total{host=\"$host\",job=\"integrations/unix\",device!~\"dm-.*|loop.*\"}[5m])",
+          "legendFormat": "writes {{device}}",
+          "refId": "B"
+        }
+      ],
+      "title": "IOPS",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 19
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(node_disk_read_time_seconds_total{host=\"$host\",job=\"integrations/unix\",device!~\"dm-.*|loop.*\"}[5m]) / clamp_min(rate(node_disk_reads_completed_total{host=\"$host\",job=\"integrations/unix\",device!~\"dm-.*|loop.*\"}[5m]), 1e-9)",
+          "legendFormat": "read lat {{device}}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(node_disk_write_time_seconds_total{host=\"$host\",job=\"integrations/unix\",device!~\"dm-.*|loop.*\"}[5m]) / clamp_min(rate(node_disk_writes_completed_total{host=\"$host\",job=\"integrations/unix\",device!~\"dm-.*|loop.*\"}[5m]), 1e-9)",
+          "legendFormat": "write lat {{device}}",
+          "refId": "B"
+        }
+      ],
+      "title": "I/O Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "max": 100,
+          "unit": "percent"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 19
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(node_disk_io_time_seconds_total{host=\"$host\",job=\"integrations/unix\",device!~\"dm-.*|loop.*\"}[5m]) * 100",
+          "legendFormat": "{{device}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Disk Utilization %",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "max": 100,
+          "unit": "percent"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "(1 - (node_filesystem_files_free{host=\"$host\",job=\"integrations/unix\",fstype!~\"tmpfs|overlay|nsfs|squashfs\"} / node_filesystem_files{host=\"$host\",job=\"integrations/unix\",fstype!~\"tmpfs|overlay|nsfs|squashfs\"})) * 100",
+          "legendFormat": "{{mountpoint}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Inode Usage %",
+      "type": "timeseries"
+    }
+  ],
+  "overwrite": true
+}

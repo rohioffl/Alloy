@@ -1,0 +1,50 @@
+# Grafana Datasource Provisioning Configuration
+
+apiVersion: 1
+
+# List of datasources to insert/update
+datasources:
+  # Prometheus datasource
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 30s
+      queryTimeout: 60s
+      # Enable Exemplars (for tracing integration)
+      exemplarTraceIdDestinations: []
+    version: 1
+
+  # Port Monitor API (Infinity datasource)
+  - name: Port Monitor API
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    url: http://monitor-api:9099
+    isDefault: false
+    editable: true
+    jsonData:
+      auth_method: 'none'
+      allowedHosts: ['monitor-api:9099', 'http://monitor-api:9099', 'port-monitor-api:9099']
+    version: 1
+
+# Optional: Loki for logs (if you add it)
+# - name: Loki
+#   type: loki
+#   access: proxy
+#   url: http://loki:3100
+#   editable: true
+#   jsonData:
+#     maxLines: 1000
+#   version: 1
+
+# Optional: Tempo for traces (if you add it)
+# - name: Tempo
+#   type: tempo
+#   access: proxy
+#   url: http://tempo:3200
+#   editable: true
+#   version: 1
