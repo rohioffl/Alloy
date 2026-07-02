@@ -97,7 +97,7 @@ input[readonly]{opacity:.75;cursor:not-allowed}
 <div class="hero">
 <div>
 <h1>Monitoring Command Center</h1>
-<p class="sub">Unified view for servers, Uptime Kuma sites, clients, accounts, and alert thresholds.</p>
+<p class="sub">Unified view for servers, Uptime Kuma sites, customers, environments, and alert thresholds.</p>
 </div>
 <div class="hero-actions">
 <button class="btn btn-secondary" onclick="loadCommandCenter()">Refresh</button>
@@ -110,16 +110,16 @@ input[readonly]{opacity:.75;cursor:not-allowed}
 <span class="mtab" data-v="servers">Servers</span>
 <span class="mtab" data-v="kuma">Uptime Kuma Sites</span>
 <span class="mtab" data-v="alerts">Alert Rules</span>
-<span class="mtab" data-v="org">Clients &amp; Accounts</span>
+<span class="mtab" data-v="org">Customers &amp; Environments</span>
 <span class="mtab" data-v="groups">Alert Groups</span>
 </div>
 <div id="view-command">
 <div class="toolbar">
-<input class="search" id="cmd-search" placeholder="Search asset, client, account..." oninput="renderCommandCenter()"/>
+<input class="search" id="cmd-search" placeholder="Search asset, customer, environment..." oninput="renderCommandCenter()"/>
 <select id="cmd-type" onchange="renderCommandCenter()"><option value="">All types</option><option value="server">Servers</option><option value="site">Sites</option></select>
 <select id="cmd-status" onchange="renderCommandCenter()"><option value="">All status</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="unknown">Unknown</option><option value="ok">OK</option></select>
-<select id="cmd-client" onchange="renderCommandCenter()"><option value="">All clients</option></select>
-<select id="cmd-account" onchange="renderCommandCenter()"><option value="">All accounts</option></select>
+<select id="cmd-customer" onchange="renderCommandCenter()"><option value="">All customers</option></select>
+<select id="cmd-environment" onchange="renderCommandCenter()"><option value="">All environments</option></select>
 <span id="cmd-count" style="font-size:12px;color:#666;margin-left:8px"></span>
 </div>
 <div class="kpi-grid" id="cmd-kpis"></div>
@@ -128,15 +128,15 @@ input[readonly]{opacity:.75;cursor:not-allowed}
 <h3>Unified Assets</h3>
 <p class="sub" style="margin-bottom:10px">Servers and Uptime Kuma sites in one operational list.</p>
 <table>
-<thead><tr><th>Asset</th><th>Type</th><th>Status</th><th>Client</th><th>Account</th><th>Signal</th><th>Actions</th></tr></thead>
+<thead><tr><th>Asset</th><th>Type</th><th>Status</th><th>Customer</th><th>Environment</th><th>Signal</th><th>Actions</th></tr></thead>
 <tbody id="cmd-assets"></tbody>
 </table>
 <div id="cmd-empty" class="empty" style="display:none">No assets match these filters.</div>
 </div>
 <div>
 <div class="panel" style="margin-bottom:16px">
-<h3>Client Health</h3>
-<div id="cmd-client-health" class="health-list"></div>
+<h3>Customer Health</h3>
+<div id="cmd-customer-health" class="health-list"></div>
 </div>
 <div class="panel">
 <h3>Alert Thresholds</h3>
@@ -151,15 +151,15 @@ input[readonly]{opacity:.75;cursor:not-allowed}
 <p class="sub">From Alloy install. IP is fixed at install — re-run <code>install-alloy.sh</code> on the node to refresh it.</p>
 <div class="toolbar">
 <input class="search" id="search" placeholder="Search hostname or name..." oninput="render()"/>
-<select id="filter-client" onchange="render()"><option value="">All clients</option></select>
-<select id="filter-account" onchange="render()"><option value="">All accounts</option></select>
+<select id="filter-customer" onchange="render()"><option value="">All customers</option></select>
+<select id="filter-environment" onchange="render()"><option value="">All environments</option></select>
 <button class="btn btn-secondary" onclick="load()">Refresh</button>
 <span id="count" style="font-size:12px;color:#666;margin-left:8px"></span>
 </div>
 <div class="layout">
 <div>
 <table>
-<thead><tr><th>Hostname</th><th>Display name</th><th>Client</th><th>Account</th><th>IP</th><th>Ports</th><th>Actions</th></tr></thead>
+<thead><tr><th>Hostname</th><th>Display name</th><th>Customer</th><th>Environment</th><th>IP</th><th>Ports</th><th>Actions</th></tr></thead>
 <tbody id="rows"></tbody>
 </table>
 <div id="empty" class="empty" style="display:none">No servers match. Install Alloy on a node or adjust filters.</div>
@@ -170,8 +170,8 @@ input[readonly]{opacity:.75;cursor:not-allowed}
 <div id="edit-form" style="display:none">
 <div class="field"><label>Hostname</label><input id="e-host" readonly/></div>
 <div class="field"><label>Display name</label><input id="e-name" placeholder="e.g. Production API"/></div>
-<div class="field"><label>Client</label><select id="e-client-sel" onchange="onCombo('e-client-sel','e-client-new',refreshEditAccounts)"></select><input id="e-client-new" style="display:none;margin-top:6px" placeholder="New client name"/></div>
-<div class="field"><label>Account</label><select id="e-account-sel" onchange="onCombo('e-account-sel','e-account-new')"></select><input id="e-account-new" style="display:none;margin-top:6px" placeholder="New account name"/></div>
+<div class="field"><label>Customer</label><select id="e-customer-sel" onchange="onCombo('e-customer-sel','e-customer-new',refreshEditEnvironments)"></select><input id="e-customer-new" style="display:none;margin-top:6px" placeholder="New customer name"/></div>
+<div class="field"><label>Environment</label><select id="e-environment-sel" onchange="onCombo('e-environment-sel','e-environment-new')"></select><input id="e-environment-new" style="display:none;margin-top:6px" placeholder="New environment name"/></div>
 <div class="field"><label>IP address</label><input id="e-ip" readonly/><p class="hint-ip">Detected at install (primary interface)</p></div>
 <div class="field"><label>Alert groups</label><div id="e-groups" style="max-height:140px;overflow:auto;border:1px solid #222;border-radius:6px;padding:8px;font-size:12px"></div></div>
 <button class="btn btn-primary" onclick="saveEdit()">Save</button>
@@ -181,11 +181,11 @@ input[readonly]{opacity:.75;cursor:not-allowed}
 </div>
 </div>
 <div id="view-kuma" style="display:none">
-<p class="sub">From Uptime Kuma Prometheus metrics. Assign Client, Account, and Display Name here so site alerts route like server alerts.</p>
+<p class="sub">From Uptime Kuma Prometheus metrics. Assign Customer, Environment, and Display Name here so site alerts route like server alerts.</p>
 <div class="toolbar">
 <input class="search" id="kuma-search" placeholder="Search site, URL, host..." oninput="renderKumaSites()"/>
-<select id="kuma-filter-client" onchange="renderKumaSites()"><option value="">All clients</option></select>
-<select id="kuma-filter-account" onchange="renderKumaSites()"><option value="">All accounts</option></select>
+<select id="kuma-filter-customer" onchange="renderKumaSites()"><option value="">All customers</option></select>
+<select id="kuma-filter-environment" onchange="renderKumaSites()"><option value="">All environments</option></select>
 <button class="btn btn-secondary" onclick="loadKumaSites()">Refresh</button>
 <a class="btn btn-secondary" href="/d/uptime-kuma-source/uptime-kuma" target="_blank" style="text-decoration:none">Open dashboard</a>
 <span id="kuma-count" style="font-size:12px;color:#666;margin-left:8px"></span>
@@ -193,7 +193,7 @@ input[readonly]{opacity:.75;cursor:not-allowed}
 <div class="layout">
 <div>
 <table>
-<thead><tr><th>Site</th><th>Display name</th><th>Status</th><th>Client</th><th>Account</th><th>Type</th><th>Target</th><th>Latency</th><th>Actions</th></tr></thead>
+<thead><tr><th>Site</th><th>Display name</th><th>Status</th><th>Customer</th><th>Environment</th><th>Type</th><th>Target</th><th>Latency</th><th>Actions</th></tr></thead>
 <tbody id="kuma-rows"></tbody>
 </table>
 <div id="kuma-empty" class="empty" style="display:none">No Uptime Kuma sites found. Configure the Prometheus source job <code>uptime-kuma</code>, then refresh.</div>
@@ -204,8 +204,8 @@ input[readonly]{opacity:.75;cursor:not-allowed}
 <div id="kuma-edit-form" style="display:none">
 <div class="field"><label>Uptime Kuma monitor</label><input id="kuma-e-monitor" readonly/></div>
 <div class="field"><label>Display name</label><input id="kuma-e-name" placeholder="e.g. Public website"/></div>
-<div class="field"><label>Client</label><select id="kuma-e-client-sel" onchange="onCombo('kuma-e-client-sel','kuma-e-client-new',refreshKumaEditAccounts)"></select><input id="kuma-e-client-new" style="display:none;margin-top:6px" placeholder="New client name"/></div>
-<div class="field"><label>Account</label><select id="kuma-e-account-sel" onchange="onCombo('kuma-e-account-sel','kuma-e-account-new')"></select><input id="kuma-e-account-new" style="display:none;margin-top:6px" placeholder="New account name"/></div>
+<div class="field"><label>Customer</label><select id="kuma-e-customer-sel" onchange="onCombo('kuma-e-customer-sel','kuma-e-customer-new',refreshKumaEditEnvironments)"></select><input id="kuma-e-customer-new" style="display:none;margin-top:6px" placeholder="New customer name"/></div>
+<div class="field"><label>Environment</label><select id="kuma-e-environment-sel" onchange="onCombo('kuma-e-environment-sel','kuma-e-environment-new')"></select><input id="kuma-e-environment-new" style="display:none;margin-top:6px" placeholder="New environment name"/></div>
 <div class="field"><label>Target</label><input id="kuma-e-target" readonly/></div>
 <div class="field"><label>Alert groups</label><div id="kuma-e-groups" style="max-height:140px;overflow:auto;border:1px solid #222;border-radius:6px;padding:8px;font-size:12px"></div></div>
 <button class="btn btn-primary" onclick="saveKumaSite()">Save</button>
@@ -302,35 +302,35 @@ input[readonly]{opacity:.75;cursor:not-allowed}
 </div>
 </div>
 <div id="view-org" style="display:none">
-<p class="sub">Manage the client → account hierarchy used in Grafana filters. Rename or merge to reassign all servers at once.</p>
+<p class="sub">Manage the customer → environment hierarchy used in Grafana filters. Rename or merge to reassign all servers at once.</p>
 <div class="panel" style="margin-bottom:16px">
 <h3>Admin / fallback recipients</h3>
 <p class="sub" style="margin-bottom:10px">The global fallback contact point (<code>email-zentra</code>). Receives <b>every</b> alert. This is also your SMTP sender, so keep at least one address here.</p>
 <div id="org-adminalert"></div>
 </div>
 <div class="panel" style="margin-bottom:16px">
-<h3>All-clients alert recipients</h3>
-<p class="sub" style="margin-bottom:10px">These addresses receive <b>every</b> alert across all clients (in addition to the admin fallback). Use for a NOC / ops team.</p>
+<h3>All-customers alert recipients</h3>
+<p class="sub" style="margin-bottom:10px">These addresses receive <b>every</b> alert across all customers (in addition to the admin fallback). Use for a NOC / ops team.</p>
 <div id="org-allalert"></div>
 </div>
 <div class="org-grid">
 <div class="panel">
-<h3>Clients</h3>
-<button class="btn btn-primary btn-sm" onclick="orgAddClient()">+ New client</button>
-<ul class="org-list" id="org-clients"></ul>
+<h3>Customers</h3>
+<button class="btn btn-primary btn-sm" onclick="orgAddCustomer()">+ New customer</button>
+<ul class="org-list" id="org-customers"></ul>
 </div>
 <div class="panel">
-<h3 id="org-detail-title">Select a client</h3>
+<h3 id="org-detail-title">Select a customer</h3>
 <div id="org-detail" style="display:none">
 <div style="margin-bottom:12px">
-<button class="btn btn-secondary btn-sm" onclick="orgRenameClient()">Rename</button>
-<button class="btn btn-secondary btn-sm" onclick="orgMergeClient()">Merge into…</button>
-<button class="btn btn-danger btn-sm" onclick="orgDeleteClient()">Delete</button>
+<button class="btn btn-secondary btn-sm" onclick="orgRenameCustomer()">Rename</button>
+<button class="btn btn-secondary btn-sm" onclick="orgMergeCustomer()">Merge into…</button>
+<button class="btn btn-danger btn-sm" onclick="orgDeleteCustomer()">Delete</button>
 </div>
-<h3 style="font-size:12px;color:#888;margin:12px 0 8px">Accounts</h3>
-<button class="btn btn-primary btn-sm" onclick="orgAddAccount()">+ New account</button>
-<table style="margin-top:10px"><thead><tr><th>Account</th><th>Servers</th><th></th></tr></thead><tbody id="org-accounts"></tbody></table>
-<h3 style="font-size:12px;color:#888;margin:18px 0 8px">Client portal (Grafana org)</h3>
+<h3 style="font-size:12px;color:#888;margin:12px 0 8px">Environments</h3>
+<button class="btn btn-primary btn-sm" onclick="orgAddEnvironment()">+ New environment</button>
+<table style="margin-top:10px"><thead><tr><th>Environment</th><th>Servers</th><th></th></tr></thead><tbody id="org-environments"></tbody></table>
+<h3 style="font-size:12px;color:#888;margin:18px 0 8px">Customer portal (Grafana org)</h3>
 <div id="org-access" style="font-size:12px;background:#0d0f14;border:1px solid #222;border-radius:6px;padding:12px"></div>
 <h3 style="font-size:12px;color:#888;margin:18px 0 8px">Alert recipient email</h3>
 <div id="org-alert" style="font-size:12px;background:#0d0f14;border:1px solid #222;border-radius:6px;padding:12px"></div>
@@ -340,7 +340,7 @@ input[readonly]{opacity:.75;cursor:not-allowed}
 </div>
 </div>
 <div id="view-groups" style="display:none">
-<p class="sub">Create a group of servers (across any client/account) and route their alerts to a shared recipient list. A server can belong to multiple groups; each enabled recipient is added alongside admin and any per-client recipients.</p>
+<p class="sub">Create a group of servers (across any customer/environment) and route their alerts to a shared recipient list. A server can belong to multiple groups; each enabled recipient is added alongside admin and any per-customer recipients.</p>
 <div class="org-grid">
 <div class="panel">
 <h3>Groups</h3>
@@ -369,6 +369,9 @@ input[readonly]{opacity:.75;cursor:not-allowed}
 <script>
 __SCRIPT__
 __COMBO_JS__
+
+function metaCustomer(x){return (x&&x.customer)||(x&&x.client)||'';}
+function metaEnvironment(x){return (x&&x.environment)||(x&&x.account)||'';}
 function switchTab(view){
   const t=document.querySelector('.mtab[data-v="'+view+'"]');if(!t)return;
   document.querySelectorAll('.mtab').forEach(x=>x.classList.toggle('active',x===t));
@@ -383,7 +386,7 @@ function switchTab(view){
   if(view==='groups')loadGroups();
 }
 document.querySelectorAll('.mtab').forEach(t=>t.onclick=()=>switchTab(t.dataset.v));
-let servers=[], selected=null, kumaSites=[], selectedKuma=null, orgData=null, orgClient=null, commandData=null;
+let servers=[], selected=null, kumaSites=[], selectedKuma=null, orgData=null, orgCustomer=null, commandData=null;
 function kumaDashboardUrl(monitorName){
   return '/d/uptime-kuma-site/uptime-kuma-site?var-monitor='+encodeURIComponent(monitorName);
 }
@@ -519,24 +522,24 @@ function assetSignal(a){
   return 'CPU '+fmtNum(a.cpu)+'% · Mem '+fmtNum(a.memory)+'% · Disk '+diskText+' · Net '+fmtNum(a.network_error_rate)+'/s · Ports '+(a.ports_down||0)+' down · Proc '+(a.processes_down||0)+' down';
 }
 async function fillCommandFilters(){
-  const clients=await fetchClients();
-  const fc=document.getElementById('cmd-client');
-  const oldC=fc.value;fc.innerHTML='<option value="">All clients</option>';
-  clients.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;fc.appendChild(o);});
+  const customers=await fetchCustomers();
+  const fc=document.getElementById('cmd-customer');
+  const oldC=fc.value;fc.innerHTML='<option value="">All customers</option>';
+  customers.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;fc.appendChild(o);});
   if(oldC)fc.value=oldC;
-  const accounts=await fetchAccounts(fc.value||'');
-  const fa=document.getElementById('cmd-account');
-  const oldA=fa.value;fa.innerHTML='<option value="">All accounts</option>';
+  const accounts=await fetchEnvironments(fc.value||'');
+  const fa=document.getElementById('cmd-environment');
+  const oldA=fa.value;fa.innerHTML='<option value="">All environments</option>';
   accounts.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;fa.appendChild(o);});
   if(oldA)fa.value=oldA;
 }
 async function loadCommandCenter(){
   await loadSilences();
   await fillCommandFilters();
-  const c=document.getElementById('cmd-client').value;
-  const a=document.getElementById('cmd-account').value;
-  const url=API+'/api/v1/command-center?client='+encodeURIComponent(c||'')+'&account='+encodeURIComponent(a||'');
-  commandData=await fetch(url).then(r=>r.json()).catch(e=>({error:String(e),totals:{},clients:[],assets:[]}));
+  const c=document.getElementById('cmd-customer').value;
+  const a=document.getElementById('cmd-environment').value;
+  const url=API+'/api/v1/command-center?customer='+encodeURIComponent(c||'')+'&environment='+encodeURIComponent(a||'');
+  commandData=await fetch(url).then(r=>r.json()).catch(e=>({error:String(e),totals:{},customers:[],assets:[]}));
   renderCommandCenter();
 }
 function commandAssets(){
@@ -548,7 +551,7 @@ function commandAssets(){
     if(type&&a.type!==type)return false;
     if(sev&&a.severity!==sev)return false;
     if(!q)return true;
-    const hay=((a.name||'')+' '+(a.id||'')+' '+(a.client||'')+' '+(a.account||'')+' '+(a.target||'')).toLowerCase();
+    const hay=((a.name||'')+' '+(a.id||'')+' '+(metaCustomer(a)||'')+' '+(metaEnvironment(a)||'')+' '+(a.target||'')).toLowerCase();
     return hay.includes(q);
   });
 }
@@ -567,12 +570,12 @@ function renderCommandKpis(){
   ];
   document.getElementById('cmd-kpis').innerHTML=cards.map(c=>'<div class="kpi '+c[3]+'"><div class="label">'+c[0]+'</div><div class="value">'+c[1]+'</div><div class="note">'+c[2]+'</div></div>').join('');
 }
-function renderCommandClients(){
-  const el=document.getElementById('cmd-client-health');
-  const clients=(commandData&&commandData.clients)||[];
-  if(!clients.length){el.innerHTML='<p style="color:#666;font-size:12px">No client data.</p>';return;}
-  el.innerHTML=clients.map(c=>{
-    return '<div class="health-item"><div class="health-main"><strong>'+escHtml(c.name)+'</strong><div class="meta">'+(c.servers||0)+' servers · '+(c.sites||0)+' sites · '+(c.accounts||[]).length+' accounts</div></div>'
+function renderCommandCustomers(){
+  const el=document.getElementById('cmd-customer-health');
+  const customers=(commandData&&commandData.customers)||[];
+  if(!customers.length){el.innerHTML='<p style="color:#666;font-size:12px">No customer data.</p>';return;}
+  el.innerHTML=customers.map(c=>{
+    return '<div class="health-item"><div class="health-main"><strong>'+escHtml(c.name)+'</strong><div class="meta">'+(c.servers||0)+' servers · '+(c.sites||0)+' sites · '+((c.environments||[]).length)+' environments</div></div>'
       +'<div class="health-counts">'+severityLabel(c.status)+'<span class="pill pill-critical">'+(c.critical||0)+' critical</span><span class="pill pill-warning">'+(c.warning||0)+' warning</span><span class="pill pill-ok">'+(c.up||0)+' ok</span></div></div>';
   }).join('');
 }
@@ -609,7 +612,7 @@ function renderCommandAssets(){
     const dash=a.dashboard_url?'<a class="link-btn" href="'+a.dashboard_url+'" target="_blank">Dashboard</a>':'';
     tr.innerHTML='<td><strong>'+escHtml(a.name||a.id)+'</strong><div class="sub" style="margin:3px 0 0">'+escHtml(a.target||a.id||'')+'</div></td>'
       +'<td>'+type+'</td><td>'+severityLabel(a.severity)+'<div class="sub" style="margin:4px 0 0">'+escHtml(a.reason||'')+'</div></td>'
-      +'<td>'+escHtml(a.client||'')+'</td><td>'+escHtml(a.account||'')+'</td><td>'+escHtml(assetSignal(a))+'</td><td>'+edit+' '+silence+' '+dash+'</td>';
+      +'<td>'+escHtml(metaCustomer(a))+'</td><td>'+escHtml(metaEnvironment(a))+'</td><td>'+escHtml(assetSignal(a))+'</td><td>'+edit+' '+silence+' '+dash+'</td>';
     tb.appendChild(tr);
   });
 }
@@ -619,7 +622,7 @@ function renderCommandCenter(){
     return;
   }
   renderCommandKpis();
-  renderCommandClients();
+  renderCommandCustomers();
   renderCommandThresholds();
   renderCommandAssets();
 }
@@ -635,34 +638,34 @@ async function openAssetEdit(type,encodedId){
     selectServer(id);
   }
 }
-async function refreshEditAccounts(){
-  const c=comboVal('e-client-sel','e-client-new');
-  const acc=await fetchAccounts(c);
-  fillCombo('e-account-sel','e-account-new',acc,document.getElementById('e-account-sel').dataset.current||'');
+async function refreshEditEnvironments(){
+  const c=comboVal('e-customer-sel','e-customer-new');
+  const acc=await fetchEnvironments(c);
+  fillCombo('e-environment-sel','e-environment-new',acc,document.getElementById('e-environment-sel').dataset.current||'');
 }
 async function load(){
   await loadSilences();
   const d=await fetch(API+'/api/v1/servers').then(r=>r.json());
   servers=d.servers||[];
-  const clients=await fetchClients();
-  const fc=document.getElementById('filter-client');
-  const prevC=fc.value;fc.innerHTML='<option value="">All clients</option>';
-  clients.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;fc.appendChild(o);});
+  const customers=await fetchCustomers();
+  const fc=document.getElementById('filter-customer');
+  const prevC=fc.value;fc.innerHTML='<option value="">All customers</option>';
+  customers.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;fc.appendChild(o);});
   if(prevC)fc.value=prevC;
-  const accounts=await fetchAccounts(fc.value||'');
-  const fa=document.getElementById('filter-account');
-  const prevA=fa.value;fa.innerHTML='<option value="">All accounts</option>';
+  const accounts=await fetchEnvironments(fc.value||'');
+  const fa=document.getElementById('filter-environment');
+  const prevA=fa.value;fa.innerHTML='<option value="">All environments</option>';
   accounts.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;fa.appendChild(o);});
   if(prevA)fa.value=prevA;
   render();
 }
 function filtered(){
   const q=document.getElementById('search').value.trim().toLowerCase();
-  const c=document.getElementById('filter-client').value;
-  const a=document.getElementById('filter-account').value;
+  const c=document.getElementById('filter-customer').value;
+  const a=document.getElementById('filter-environment').value;
   return servers.filter(s=>{
-    if(c&&s.client!==c)return false;
-    if(a&&s.account!==a)return false;
+    if(c&&metaCustomer(s)!==c)return false;
+    if(a&&metaEnvironment(s)!==a)return false;
     if(!q)return true;
     const hay=(s.hostname+' '+(s.name||'')+' '+(s.ip||'')).toLowerCase();
     return hay.includes(q);
@@ -679,9 +682,9 @@ function render(){
   list.forEach(s=>{
     const tr=document.createElement('tr');
     tr.className='data-row'+(selected===s.hostname?' selected':'');
-    const cu=s.client||'Unassigned';
+    const cu=metaCustomer(s)||'Unassigned';
     const badge=cu==='Unassigned'?'badge badge-unassigned':'badge';
-    tr.innerHTML=`<td><code>${s.hostname}</code></td><td>${s.name||'—'}</td><td><span class="${badge}">${cu}</span></td><td>${s.account||'—'}</td><td>${s.ip||'—'}</td><td>${s.port_count||0}</td><td>${silenceButton('server',s.hostname,'')}</td>`;
+    tr.innerHTML=`<td><code>${s.hostname}</code></td><td>${s.name||'—'}</td><td><span class="${badge}">${cu}</span></td><td>${metaEnvironment(s)||'—'}</td><td>${s.ip||'—'}</td><td>${s.port_count||0}</td><td>${silenceButton('server',s.hostname,'')}</td>`;
     tr.onclick=()=>selectServer(s.hostname);
     tb.appendChild(tr);
   });
@@ -696,11 +699,11 @@ async function selectServer(host){
   document.getElementById('e-host').value=s.hostname;
   document.getElementById('e-name').value=s.name||'';
   document.getElementById('e-ip').value=s.ip||'';
-  const clients=await fetchClients();
-  fillCombo('e-client-sel','e-client-new',clients,s.client||'');
-  const acc=await fetchAccounts(s.client||'');
-  document.getElementById('e-account-sel').dataset.current=s.account||'';
-  fillCombo('e-account-sel','e-account-new',acc,s.account||'');
+  const customers=await fetchCustomers();
+  fillCombo('e-customer-sel','e-customer-new',customers,metaCustomer(s));
+  const acc=await fetchEnvironments(metaCustomer(s)||'');
+  document.getElementById('e-environment-sel').dataset.current=metaEnvironment(s)||'';
+  fillCombo('e-environment-sel','e-environment-new',acc,metaEnvironment(s)||'');
   renderServerGroups(host);
 }
 async function renderServerGroups(host){
@@ -721,7 +724,7 @@ async function renderServerGroups(host){
 async function saveEdit(){
   const host=document.getElementById('e-host').value;
   const st=document.getElementById('edit-status');
-  const body={name:document.getElementById('e-name').value.trim(),client:comboVal('e-client-sel','e-client-new'),account:comboVal('e-account-sel','e-account-new')};
+  const body={name:document.getElementById('e-name').value.trim(),customer:comboVal('e-customer-sel','e-customer-new'),environment:comboVal('e-environment-sel','e-environment-new')};
   const d=await fetch(API+'/api/v1/servers/'+encodeURIComponent(host),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());
   // save alert-group membership
   const gids=[].slice.call(document.querySelectorAll('#e-groups .e-group')).filter(c=>c.checked).map(c=>c.value);
@@ -729,23 +732,23 @@ async function saveEdit(){
   st.textContent=d.message||d.error;st.style.color=d.error?'#ef4444':'#22c55e';
   if(!d.error)load().then(()=>selectServer(host));
 }
-async function refreshKumaEditAccounts(){
-  const c=comboVal('kuma-e-client-sel','kuma-e-client-new');
-  const acc=await fetchAccounts(c);
-  fillCombo('kuma-e-account-sel','kuma-e-account-new',acc,document.getElementById('kuma-e-account-sel').dataset.current||'');
+async function refreshKumaEditEnvironments(){
+  const c=comboVal('kuma-e-customer-sel','kuma-e-customer-new');
+  const acc=await fetchEnvironments(c);
+  fillCombo('kuma-e-environment-sel','kuma-e-environment-new',acc,document.getElementById('kuma-e-environment-sel').dataset.current||'');
 }
 async function loadKumaSites(){
   await loadSilences();
   const d=await fetch(API+'/api/v1/uptime-kuma/sites').then(r=>r.json()).catch(()=>({sites:[]}));
   kumaSites=d.sites||[];
-  const clients=await fetchClients();
-  const fc=document.getElementById('kuma-filter-client');
-  const prevC=fc.value;fc.innerHTML='<option value="">All clients</option>';
-  clients.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;fc.appendChild(o);});
+  const customers=await fetchCustomers();
+  const fc=document.getElementById('kuma-filter-customer');
+  const prevC=fc.value;fc.innerHTML='<option value="">All customers</option>';
+  customers.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;fc.appendChild(o);});
   if(prevC)fc.value=prevC;
-  const accounts=await fetchAccounts(fc.value||'');
-  const fa=document.getElementById('kuma-filter-account');
-  const prevA=fa.value;fa.innerHTML='<option value="">All accounts</option>';
+  const accounts=await fetchEnvironments(fc.value||'');
+  const fa=document.getElementById('kuma-filter-environment');
+  const prevA=fa.value;fa.innerHTML='<option value="">All environments</option>';
   accounts.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;fa.appendChild(o);});
   if(prevA)fa.value=prevA;
   renderKumaSites();
@@ -757,11 +760,11 @@ function kumaStatus(site){
 }
 function filteredKumaSites(){
   const q=document.getElementById('kuma-search').value.trim().toLowerCase();
-  const c=document.getElementById('kuma-filter-client').value;
-  const a=document.getElementById('kuma-filter-account').value;
+  const c=document.getElementById('kuma-filter-customer').value;
+  const a=document.getElementById('kuma-filter-environment').value;
   return kumaSites.filter(s=>{
-    if(c&&s.client!==c)return false;
-    if(a&&s.account!==a)return false;
+    if(c&&metaCustomer(s)!==c)return false;
+    if(a&&metaEnvironment(s)!==a)return false;
     if(!q)return true;
     const hay=((s.monitor_name||'')+' '+(s.name||'')+' '+(s.target||'')+' '+(s.monitor_url||'')+' '+(s.monitor_hostname||'')).toLowerCase();
     return hay.includes(q);
@@ -778,11 +781,11 @@ function renderKumaSites(){
   list.forEach(s=>{
     const tr=document.createElement('tr');
     tr.className='data-row'+(selectedKuma===s.monitor_name?' selected':'');
-    const cu=s.client||'Unassigned';
+    const cu=metaCustomer(s)||'Unassigned';
     const badge=cu==='Unassigned'?'badge badge-unassigned':'badge';
     const st=kumaStatus(s);
     const latency=(s.response_time===null||s.response_time===undefined)?'—':Math.round(s.response_time)+' ms';
-    tr.innerHTML=`<td><a href="${kumaDashboardUrl(s.monitor_name)}" target="_blank" onclick="event.stopPropagation()" style="color:#93c5fd;text-decoration:none"><code>${s.monitor_name}</code></a></td><td>${s.name||'—'}</td><td><span class="${st[1]}">${st[0]}</span></td><td><span class="${badge}">${cu}</span></td><td>${s.account||'—'}</td><td>${s.monitor_type||'—'}</td><td>${s.target||'—'}</td><td>${latency}</td><td>${silenceButton('site',s.monitor_name,'Site Monitor Down')}</td>`;
+    tr.innerHTML=`<td><a href="${kumaDashboardUrl(s.monitor_name)}" target="_blank" onclick="event.stopPropagation()" style="color:#93c5fd;text-decoration:none"><code>${s.monitor_name}</code></a></td><td>${s.name||'—'}</td><td><span class="${st[1]}">${st[0]}</span></td><td><span class="${badge}">${cu}</span></td><td>${metaEnvironment(s)||'—'}</td><td>${s.monitor_type||'—'}</td><td>${s.target||'—'}</td><td>${latency}</td><td>${silenceButton('site',s.monitor_name,'Site Monitor Down')}</td>`;
     tr.onclick=()=>selectKumaSite(s.monitor_name);
     tb.appendChild(tr);
   });
@@ -798,11 +801,11 @@ async function selectKumaSite(monitorName){
   document.getElementById('kuma-e-name').value=s.name||'';
   document.getElementById('kuma-e-target').value=s.target||'';
   document.getElementById('kuma-open-dashboard').href=kumaDashboardUrl(s.monitor_name);
-  const clients=await fetchClients();
-  fillCombo('kuma-e-client-sel','kuma-e-client-new',clients,s.client||'');
-  const acc=await fetchAccounts(s.client||'');
-  document.getElementById('kuma-e-account-sel').dataset.current=s.account||'';
-  fillCombo('kuma-e-account-sel','kuma-e-account-new',acc,s.account||'');
+  const customers=await fetchCustomers();
+  fillCombo('kuma-e-customer-sel','kuma-e-customer-new',customers,metaCustomer(s));
+  const acc=await fetchEnvironments(metaCustomer(s)||'');
+  document.getElementById('kuma-e-environment-sel').dataset.current=metaEnvironment(s)||'';
+  fillCombo('kuma-e-environment-sel','kuma-e-environment-new',acc,metaEnvironment(s)||'');
   renderKumaSiteGroups(monitorName);
 }
 async function renderKumaSiteGroups(monitorName){
@@ -823,7 +826,7 @@ async function renderKumaSiteGroups(monitorName){
 async function saveKumaSite(){
   const monitorName=document.getElementById('kuma-e-monitor').value;
   const st=document.getElementById('kuma-edit-status');
-  const body={name:document.getElementById('kuma-e-name').value.trim(),client:comboVal('kuma-e-client-sel','kuma-e-client-new'),account:comboVal('kuma-e-account-sel','kuma-e-account-new')};
+  const body={name:document.getElementById('kuma-e-name').value.trim(),customer:comboVal('kuma-e-customer-sel','kuma-e-customer-new'),environment:comboVal('kuma-e-environment-sel','kuma-e-environment-new')};
   const d=await fetch(API+'/api/v1/uptime-kuma/sites/'+encodeURIComponent(monitorName),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json()).catch(e=>({error:String(e)}));
   if(!d.error){
     const gids=[].slice.call(document.querySelectorAll('#kuma-e-groups .kuma-e-group')).filter(c=>c.checked).map(c=>c.value);
@@ -910,24 +913,24 @@ async function saveAlertSettings(){
 function orgStatus(msg,ok){const e=document.getElementById('org-status');e.textContent=msg;e.style.color=ok?'#22c55e':'#ef4444';}
 async function loadOrg(){
   orgData=await fetch(API+'/api/v1/taxonomy').then(r=>r.json());
-  const ul=document.getElementById('org-clients');ul.innerHTML='';
-  (orgData.clients||[]).forEach(c=>{
+  const ul=document.getElementById('org-customers');ul.innerHTML='';
+  (orgData.customers||orgData.clients||[]).forEach(c=>{
     const li=document.createElement('li');
-    li.className=orgClient===c.name?'active':'';
+    li.className=orgCustomer===c.name?'active':'';
     const total=(c.server_count||0)+(c.site_count||0);
     li.innerHTML=`<span>${c.name}</span><span class="cnt">${total}</span>`;
-    li.onclick=()=>{orgClient=c.name;loadOrg();};
+    li.onclick=()=>{orgCustomer=c.name;loadOrg();};
     ul.appendChild(li);
   });
-  if(!orgClient&&orgData.clients&&orgData.clients.length)orgClient=orgData.clients[0].name;
+  if(!orgCustomer&&(orgData.customers||orgData.clients)&&((orgData.customers||orgData.clients).length))orgCustomer=(orgData.customers||orgData.clients)[0].name;
   if(!document.getElementById('org-adminalert-rows'))renderAdminAlert();
   if(!document.getElementById('org-allalert-rows'))renderAllAlert();
-  const cur=(orgData.clients||[]).find(x=>x.name===orgClient);
+  const cur=(orgData.customers||orgData.clients||[]).find(x=>x.name===orgCustomer);
   document.getElementById('org-detail').style.display=cur?'block':'none';
-  document.getElementById('org-detail-title').textContent=cur?('Client: '+cur.name):'Select a client';
+  document.getElementById('org-detail-title').textContent=cur?('Customer: '+cur.name):'Select a customer';
   if(cur){await loadOrgsCache();renderOrgAccess(cur.name);renderOrgAlert(cur.name);}
-  const tb=document.getElementById('org-accounts');tb.innerHTML='';
-  if(cur)(cur.accounts||[]).forEach(a=>{
+  const tb=document.getElementById('org-environments');tb.innerHTML='';
+  if(cur)(cur.environments||cur.accounts||[]).forEach(a=>{
     const tr=document.createElement('tr');
     const total=(a.server_count||0)+(a.site_count||0);
     tr.innerHTML=`<td>${a.name}</td><td>${total}</td><td class="org-acc-actions"></td>`;
@@ -937,69 +940,69 @@ async function loadOrg(){
       b.className=(act==='del'?'btn btn-danger btn-sm':'btn btn-secondary btn-sm');
       b.textContent=label;
       b.dataset.act=act;
-      b.dataset.account=a.name;
-      b.onclick=()=>orgAccountAction(act,a.name);
+      b.dataset.environment=a.name;
+      b.onclick=()=>orgEnvironmentAction(act,a.name);
       td.appendChild(b);
     });
     tb.appendChild(tr);
   });
 }
-function orgAccountAction(act,name){
-  if(act==='rename')return orgRenameAccount(name);
-  if(act==='merge')return orgMergeAccount(name);
-  return orgDeleteAccount(name);
+function orgEnvironmentAction(act,name){
+  if(act==='rename')return orgRenameEnvironment(name);
+  if(act==='merge')return orgMergeEnvironment(name);
+  return orgDeleteEnvironment(name);
 }
-async function orgAddClient(){
-  const n=prompt('New client name:');if(!n)return;
-  const d=await fetch(API+'/api/v1/taxonomy/clients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})}).then(r=>r.json());
-  orgStatus(d.message||d.error,!d.error);if(!d.error){orgClient=d.name||n.trim();await loadOrg();await load();}
+async function orgAddCustomer(){
+  const n=prompt('New customer name:');if(!n)return;
+  const d=await fetch(API+'/api/v1/taxonomy/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){orgCustomer=d.name||n.trim();await loadOrg();await load();}
 }
-async function orgRenameClient(){
-  if(!orgClient)return;
-  const n=prompt('Rename client to:',orgClient);if(!n||n===orgClient)return;
-  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_name:n})}).then(r=>r.json());
-  orgStatus(d.message||d.error,!d.error);if(!d.error){orgClient=n.trim();await loadOrg();await load();}
+async function orgRenameCustomer(){
+  if(!orgCustomer)return;
+  const n=prompt('Rename customer to:',orgCustomer);if(!n||n===orgCustomer)return;
+  const d=await fetch(API+'/api/v1/taxonomy/customers/'+encodeURIComponent(orgCustomer),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_name:n})}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){orgCustomer=n.trim();await loadOrg();await load();}
 }
-async function orgMergeClient(){
-  if(!orgClient)return;
-  const t=prompt('Merge all servers from "'+orgClient+'" into client:');if(!t)return;
-  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient)+'?merge_into='+encodeURIComponent(t),{method:'DELETE'}).then(r=>r.json());
-  orgStatus(d.message||d.error,!d.error);if(!d.error){orgClient=t.trim();await loadOrg();await load();}
+async function orgMergeCustomer(){
+  if(!orgCustomer)return;
+  const t=prompt('Merge all servers from "'+orgCustomer+'" into customer:');if(!t)return;
+  const d=await fetch(API+'/api/v1/taxonomy/customers/'+encodeURIComponent(orgCustomer)+'?merge_into='+encodeURIComponent(t),{method:'DELETE'}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){orgCustomer=t.trim();await loadOrg();await load();}
 }
-async function orgDeleteClient(){
-  if(!orgClient)return;
-  if(!confirm('Delete client "'+orgClient+'"? Servers must be merged or reassigned first.'))return;
-  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient),{method:'DELETE'}).then(r=>r.json());
-  orgStatus(d.message||d.error,!d.error);if(!d.error){orgClient=null;await loadOrg();await load();}
+async function orgDeleteCustomer(){
+  if(!orgCustomer)return;
+  if(!confirm('Delete customer "'+orgCustomer+'"? Servers must be merged or reassigned first.'))return;
+  const d=await fetch(API+'/api/v1/taxonomy/customers/'+encodeURIComponent(orgCustomer),{method:'DELETE'}).then(r=>r.json());
+  orgStatus(d.message||d.error,!d.error);if(!d.error){orgCustomer=null;await loadOrg();await load();}
 }
-async function orgAddAccount(){
-  if(!orgClient)return;
-  const n=prompt('New account name under '+orgClient+':');if(!n)return;
-  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient)+'/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})}).then(r=>r.json());
+async function orgAddEnvironment(){
+  if(!orgCustomer)return;
+  const n=prompt('New environment name under '+orgCustomer+':');if(!n)return;
+  const d=await fetch(API+'/api/v1/taxonomy/customers/'+encodeURIComponent(orgCustomer)+'/environments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})}).then(r=>r.json());
   orgStatus(d.message||d.error,!d.error);if(!d.error){await loadOrg();await load();}
 }
-async function orgRenameAccount(oldName){
-  const n=prompt('Rename account to:',oldName);if(!n||n===oldName)return;
-  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient)+'/accounts/'+encodeURIComponent(oldName),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_name:n})}).then(r=>r.json());
+async function orgRenameEnvironment(oldName){
+  const n=prompt('Rename environment to:',oldName);if(!n||n===oldName)return;
+  const d=await fetch(API+'/api/v1/taxonomy/customers/'+encodeURIComponent(orgCustomer)+'/environments/'+encodeURIComponent(oldName),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_name:n})}).then(r=>r.json());
   orgStatus(d.message||d.error,!d.error);if(!d.error){await loadOrg();await load();}
 }
-async function orgMergeAccount(oldName){
-  const t=prompt('Merge account "'+oldName+'" into:');if(!t)return;
-  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient)+'/accounts/'+encodeURIComponent(oldName)+'?merge_into='+encodeURIComponent(t),{method:'DELETE'}).then(r=>r.json());
+async function orgMergeEnvironment(oldName){
+  const t=prompt('Merge environment "'+oldName+'" into:');if(!t)return;
+  const d=await fetch(API+'/api/v1/taxonomy/customers/'+encodeURIComponent(orgCustomer)+'/environments/'+encodeURIComponent(oldName)+'?merge_into='+encodeURIComponent(t),{method:'DELETE'}).then(r=>r.json());
   orgStatus(d.message||d.error,!d.error);if(!d.error){await loadOrg();await load();}
 }
-async function orgDeleteAccount(name){
-  if(!confirm('Delete account "'+name+'"?'))return;
-  const d=await fetch(API+'/api/v1/taxonomy/clients/'+encodeURIComponent(orgClient)+'/accounts/'+encodeURIComponent(name),{method:'DELETE'}).then(r=>r.json());
+async function orgDeleteEnvironment(name){
+  if(!confirm('Delete environment "'+name+'"?'))return;
+  const d=await fetch(API+'/api/v1/taxonomy/customers/'+encodeURIComponent(orgCustomer)+'/environments/'+encodeURIComponent(name),{method:'DELETE'}).then(r=>r.json());
   orgStatus(d.message||d.error,!d.error);if(!d.error){await loadOrg();await load();}
 }
-document.getElementById('filter-client').onchange=async function(){await load();};
-document.getElementById('cmd-client').onchange=async function(){await loadCommandCenter();};
-document.getElementById('cmd-account').onchange=async function(){await loadCommandCenter();};
-document.getElementById('kuma-filter-client').onchange=async function(){
-  const accounts=await fetchAccounts(this.value||'');
-  const fa=document.getElementById('kuma-filter-account');
-  fa.innerHTML='<option value="">All accounts</option>';
+document.getElementById('filter-customer').onchange=async function(){await load();};
+document.getElementById('cmd-customer').onchange=async function(){await loadCommandCenter();};
+document.getElementById('cmd-environment').onchange=async function(){await loadCommandCenter();};
+document.getElementById('kuma-filter-customer').onchange=async function(){
+  const accounts=await fetchEnvironments(this.value||'');
+  const fa=document.getElementById('kuma-filter-environment');
+  fa.innerHTML='<option value="">All environments</option>';
   accounts.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;fa.appendChild(o);});
   renderKumaSites();
 };
@@ -1008,53 +1011,53 @@ loadCommandCenter();
 let orgsCache={};
 async function loadOrgsCache(){
   const d=await fetch(API+'/api/v1/grafana-orgs/status').then(r=>r.json()).catch(()=>({orgs:[]}));
-  orgsCache={};(d.orgs||[]).forEach(o=>{orgsCache[o.client]=o;});
+  orgsCache={};(d.orgs||[]).forEach(o=>{orgsCache[o.customer||o.client]=o;});
 }
-function renderOrgAccess(client){
+function renderOrgAccess(customer){
   const el=document.getElementById('org-access');
   if(!el)return;
-  const o=orgsCache[client];
+  const o=orgsCache[customer];
   if(o){
     const dash=o.dashboard_url?'<a href="'+o.dashboard_url+'" target="_blank" style="color:#3b82f6">Open dashboard</a>':'-';
     el.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'
       +'<div><span style="color:#22c55e">\u25cf Portal active</span><br><span style="color:#888">Login:</span> <b>'+(o.login||'-')+'</b> &nbsp; <span style="color:#888">Dashboard:</span> '+dash+'</div>'
-      +'<button class="btn btn-danger btn-sm" onclick="orgDeletePortal(\''+client+'\')">Delete portal</button></div>'
+      +'<button class="btn btn-danger btn-sm" onclick="orgDeletePortal(\''+customer+'\')">Delete portal</button></div>'
       +'<div id="org-access-status" style="margin-top:8px"></div>';
   } else {
     el.innerHTML='<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">'
       +'<div class="field" style="margin:0"><label>Viewer password</label><input id="org-portal-pass" type="password" placeholder="ChangeMe@2026" style="min-width:160px"/></div>'
-      +'<button class="btn btn-primary btn-sm" onclick="orgCreatePortal(\''+client+'\')">Create client portal</button></div>'
-      +'<p style="color:#888;margin-top:8px">Creates a separate Grafana org so this client can log in and view only their servers.</p>'
+      +'<button class="btn btn-primary btn-sm" onclick="orgCreatePortal(\''+customer+'\')">Create customer portal</button></div>'
+      +'<p style="color:#888;margin-top:8px">Creates a separate Grafana org so this customer can log in and view only their servers.</p>'
       +'<div id="org-access-status" style="margin-top:8px"></div>';
   }
 }
-async function orgCreatePortal(client){
+async function orgCreatePortal(customer){
   const pass=(document.getElementById('org-portal-pass')||{}).value||'';
   const st=document.getElementById('org-access-status');
   if(st){st.textContent='Creating portal...';st.style.color='#aaa';}
-  const d=await fetch(API+'/api/v1/grafana-orgs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client,password:pass||'ChangeMe@2026'})}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  const d=await fetch(API+'/api/v1/grafana-orgs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer,password:pass||'ChangeMe@2026'})}).then(r=>r.json()).catch(e=>({error:String(e)}));
   if(d.error){if(st){st.textContent='Error: '+d.error;st.style.color='#ef4444';}}
   else{if(st){st.textContent='Created! Login: '+d.login+' / '+(pass||'ChangeMe@2026');st.style.color='#22c55e';}}
-  await loadOrgsCache();renderOrgAccess(client);
+  await loadOrgsCache();renderOrgAccess(customer);
 }
-async function orgDeletePortal(client){
-  if(!confirm('Delete the Grafana portal for "'+client+'"? Removes their org, dashboard, and viewer login. Servers are NOT affected.'))return;
+async function orgDeletePortal(customer){
+  if(!confirm('Delete the Grafana portal for "'+customer+'"? Removes their org, dashboard, and viewer login. Servers are NOT affected.'))return;
   const st=document.getElementById('org-access-status');
   if(st){st.textContent='Deleting portal...';st.style.color='#aaa';}
-  const d=await fetch(API+'/api/v1/grafana-orgs/'+encodeURIComponent(client),{method:'DELETE'}).then(r=>r.json()).catch(e=>({error:String(e)}));
-  await loadOrgsCache();renderOrgAccess(client);
+  const d=await fetch(API+'/api/v1/grafana-orgs/'+encodeURIComponent(customer),{method:'DELETE'}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  await loadOrgsCache();renderOrgAccess(customer);
 }
-async function renderOrgAlert(client){
+async function renderOrgAlert(customer){
   const el=document.getElementById('org-alert');
   if(!el)return;
-  const d=await fetch(API+'/api/v1/clients/'+encodeURIComponent(client)+'/alert-email').then(r=>r.json()).catch(()=>({recipients:[]}));
+  const d=await fetch(API+'/api/v1/clients/'+encodeURIComponent(customer)+'/alert-email').then(r=>r.json()).catch(()=>({recipients:[]}));
   const recips=(d.recipients&&d.recipients.length)?d.recipients:[];
   el.innerHTML='<div id="org-alert-rows"></div>'
     +'<button class="btn btn-secondary btn-sm" onclick="addAlertRow()">+ Add email</button>'
     +'<div style="margin-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
     +'<button class="btn btn-primary btn-sm" onclick="saveOrgAlert()">Save</button>'
     +'<button class="btn btn-secondary btn-sm" onclick="saveOrgAlert(true)">Remove all</button></div>'
-    +'<p style="color:#888;margin-top:8px">One box per recipient \u2014 toggle each on/off individually with its checkbox. Admin always receives every alert as a fallback. Enabled recipients get alerts on this client\u2019s assigned servers (routed by host).</p>'
+    +'<p style="color:#888;margin-top:8px">One box per recipient \u2014 toggle each on/off individually with its checkbox. Admin always receives every alert as a fallback. Enabled recipients get alerts on this customer\u2019s assigned servers (routed by host).</p>'
     +'<div id="org-alert-status" style="margin-top:8px"></div>';
   const rows=document.getElementById('org-alert-rows');
   recips.forEach(r=>rows.appendChild(makeAlertRow(r.email,r.enabled)));
@@ -1066,7 +1069,7 @@ function makeAlertRow(email,enabled){
   const chk=document.createElement('input');
   chk.type='checkbox';chk.className='alert-enabled';chk.checked=(enabled!==false);chk.title='enabled';
   const inp=document.createElement('input');
-  inp.type='email';inp.className='alert-email';inp.placeholder='ops@client.com';
+  inp.type='email';inp.className='alert-email';inp.placeholder='ops@customer.com';
   inp.style.cssText='flex:1;min-width:220px';inp.value=email||'';
   const del=document.createElement('button');
   del.className='btn btn-secondary btn-sm';del.textContent='\u2715';del.title='remove';
@@ -1091,16 +1094,16 @@ function recipSummary(recips){
   return (recips||[]).map(r=>r.email+(r.enabled?'':' (off)')).join(', ');
 }
 async function saveOrgAlert(removeAll){
-  const client=orgClient;
+  const customer=orgCustomer;
   const recipients=removeAll?[]:collectRecipients('org-alert-rows');
   const st=document.getElementById('org-alert-status');
   if(st){st.textContent='Saving...';st.style.color='#aaa';}
-  const d=await fetch(API+'/api/v1/clients/'+encodeURIComponent(client)+'/alert-email',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipients})}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  const d=await fetch(API+'/api/v1/clients/'+encodeURIComponent(customer)+'/alert-email',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipients})}).then(r=>r.json()).catch(e=>({error:String(e)}));
   if(st){
     if(d.error){st.textContent='Error: '+d.error;st.style.color='#ef4444';}
     else{const s=recipSummary(d.recipients);st.textContent=(s?('Saved: '+s):'Removed')+(d.synced?' \u00b7 routing updated':(' \u00b7 sync issue: '+(d.message||'')));st.style.color=d.synced?'#22c55e':'#f59e0b';}
   }
-  renderOrgAlert(client);
+  renderOrgAlert(customer);
 }
 async function renderAllAlert(){
   const el=document.getElementById('org-allalert');
@@ -1214,7 +1217,7 @@ function renderServerPicker(selected){
     const row=document.createElement('label');
     row.style.cssText='display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px';
     const cb=document.createElement('input');cb.type='checkbox';cb.className='group-server';cb.value=s.hostname;cb.checked=!!sel[s.hostname];
-    const span=document.createElement('span');span.innerHTML=s.hostname+(s.name?(' ('+s.name+')'):'')+' <span style="color:#666">'+(s.client||'')+'</span>';
+    const span=document.createElement('span');span.innerHTML=s.hostname+(s.name?(' ('+s.name+')'):'')+' <span style="color:#666">'+(metaCustomer(s)||'')+'</span>';
     row.appendChild(cb);row.appendChild(span);el.appendChild(row);
   });
 }
@@ -1226,7 +1229,7 @@ function renderSitePicker(selected){
     const row=document.createElement('label');
     row.style.cssText='display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px';
     const cb=document.createElement('input');cb.type='checkbox';cb.className='group-site';cb.value=s.monitor_name;cb.checked=!!sel[s.monitor_name];
-    const span=document.createElement('span');span.innerHTML=s.monitor_name+(s.name&&s.name!==s.monitor_name?(' ('+s.name+')'):'')+' <span style="color:#666">'+(s.client||'')+'</span>';
+    const span=document.createElement('span');span.innerHTML=s.monitor_name+(s.name&&s.name!==s.monitor_name?(' ('+s.name+')'):'')+' <span style="color:#666">'+(metaCustomer(s)||'')+'</span>';
     row.appendChild(cb);row.appendChild(span);el.appendChild(row);
   });
 }

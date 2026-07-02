@@ -1,5 +1,5 @@
 """Central Monitoring API (FastAPI) — server registry, naming, port probe targets,
-client/account taxonomy, and per-client Grafana org provisioning.
+customer/environment taxonomy, and per-customer Grafana org provisioning.
 
 Runs on the central Grafana/Prometheus server (:9099). Serves both the REST API
 and the embedded management UI (same origin, so Grafana iframes work directly).
@@ -113,22 +113,22 @@ def _require_write_auth(request: Request) -> bool:
 
 
 def _sync_alerting():
-    """Ensure each client's email contact point reflects its enabled addresses
+    """Ensure each customer's email contact point reflects its enabled addresses
     and rebuild the notification policy (host-membership routing). Safe to call
     often; never raises into the request path."""
     try:
         gf._grafana_switch_org(1)  # alerting lives in the main org
         data = st.load_alert_recipients()
         admin_info = data.pop(ADMIN_KEY, None)  # admin handled separately (root catch-all)
-        host_map = st.client_host_map()
-        site_map = st.client_kuma_site_map()
+        host_map = st.customer_host_map()
+        site_map = st.customer_kuma_site_map()
         active = {}
-        # 1. upsert contact points for clients that have >=1 enabled address
-        for client, info in data.items():
+        # 1. upsert contact points for customers that have >=1 enabled address
+        for customer, info in data.items():
             emails = st.enabled_emails(info)
             if emails:
-                active[client] = emails
-                gf._upsert_email_contact_point(gf._client_receiver_name(client), emails)
+                active[customer] = emails
+                gf._upsert_email_contact_point(gf._customer_receiver_name(customer), emails)
         # 2. rebuild policy (routes only reference active receivers)
         group_routes = []
         active_group_receivers = set()
@@ -147,10 +147,10 @@ def _sync_alerting():
         if admin_info is not None:
             gf._upsert_email_contact_point(ADMIN_RECEIVER, st.enabled_emails(admin_info))
         # 3. remove managed contact points no longer referenced
-        active_receivers = {gf._client_receiver_name(c) for c in active} | active_group_receivers
+        active_receivers = {gf._customer_receiver_name(c) for c in active} | active_group_receivers
         for cp in gf._list_contact_points():
             name = cp.get("name", "")
-            managed = name == gf.ALL_CLIENTS_RECEIVER or name.startswith("client-") or name.startswith("group-")
+            managed = name == gf.ALL_CLIENTS_RECEIVER or name.startswith("customer-") or name.startswith("client-") or name.startswith("group-")
             if managed and name not in active_receivers:
                 try:
                     gf._delete_email_contact_point(name)
@@ -161,14 +161,14 @@ def _sync_alerting():
         return False, str(ex)
 
 
-def _hosts_variable(client="", account="", include_unregistered=False):
+def _hosts_variable(customer="", environment="", include_unregistered=False):
     nodes = list(st.load_nodes())
     if include_unregistered:
         registered = {n["hostname"] for n in nodes}
         for h in st.prom_hosts():
             if h and h not in registered:
-                nodes.append({"hostname": h, "ip": "", "client": "", "account": "", "name": ""})
-    nodes = st.filter_nodes(nodes, client, account)
+                nodes.append({"hostname": h, "ip": "", "customer": "", "environment": "", "name": ""})
+    nodes = st.filter_nodes(nodes, customer=customer, environment=environment)
     return [{"__text": st.host_display(n), "__value": n["hostname"]}
             for n in sorted(nodes, key=lambda x: st.host_display(x))]
 
@@ -346,28 +346,28 @@ API_DOCS = {
     "base": "/api/v1",
     "endpoints": [
         {"method": "GET", "path": "/api/v1/docs", "description": "This documentation"},
-        {"method": "GET", "path": "/api/v1/command-center?client=&account=", "description": "Unified servers, Uptime Kuma sites, client/account health, and alert threshold summary"},
+        {"method": "GET", "path": "/api/v1/command-center?customer=&environment=", "description": "Unified servers, Uptime Kuma sites, customer/environment health, and alert threshold summary (legacy query params client/account also accepted)"},
         {"method": "GET", "path": "/api/v1/servers", "description": "List all registered servers"},
-        {"method": "POST", "path": "/api/v1/servers", "body": {"hostname": "required", "name": "", "client": "", "account": "", "ip": ""}, "description": "Add server manually"},
+        {"method": "POST", "path": "/api/v1/servers", "body": {"hostname": "required", "name": "", "customer": "", "environment": "", "ip": ""}, "description": "Add server manually (legacy client/account fields also accepted)"},
         {"method": "GET", "path": "/api/v1/servers/{hostname}", "description": "Get one server"},
-        {"method": "PUT", "path": "/api/v1/servers/{hostname}", "body": {"name": "", "client": "", "account": "", "ip": ""}, "description": "Update display name and metadata"},
+        {"method": "PUT", "path": "/api/v1/servers/{hostname}", "body": {"name": "", "customer": "", "environment": "", "ip": ""}, "description": "Update display name and metadata (legacy client/account fields also accepted)"},
         {"method": "DELETE", "path": "/api/v1/servers/{hostname}", "description": "Remove server and its ports"},
-        {"method": "POST", "path": "/api/v1/servers/register", "body": {"hostname": "required", "ip": "", "name": "", "client": "", "account": ""}, "description": "Auto-register from Alloy installer"},
+        {"method": "POST", "path": "/api/v1/servers/register", "body": {"hostname": "required", "ip": "", "name": "", "customer": "", "environment": ""}, "description": "Auto-register from Alloy installer (legacy client/account fields also accepted)"},
         {"method": "GET", "path": "/api/v1/servers/{hostname}/ports", "description": "List port probes"},
         {"method": "POST", "path": "/api/v1/servers/{hostname}/ports", "body": {"name": "required", "port": "required", "address": "optional", "module": "tcp_connect|http_2xx"}, "description": "Add port (address defaults to server IP:port)"},
         {"method": "DELETE", "path": "/api/v1/servers/{hostname}/ports/{name}", "description": "Remove port"},
         {"method": "GET", "path": "/api/v1/servers/{hostname}/targets", "description": "Blackbox targets for Alloy"},
-        {"method": "GET", "path": "/api/v1/variables/clients", "description": "Grafana client dropdown"},
-        {"method": "GET", "path": "/api/v1/variables/accounts?client=", "description": "Grafana account dropdown"},
-        {"method": "GET", "path": "/api/v1/variables/hosts?client=&account=", "description": "Grafana host dropdown"},
+        {"method": "GET", "path": "/api/v1/variables/customers", "description": "Grafana customer dropdown"},
+        {"method": "GET", "path": "/api/v1/variables/environments?customer=", "description": "Grafana environment dropdown"},
+        {"method": "GET", "path": "/api/v1/variables/hosts?customer=&environment=", "description": "Grafana host dropdown"},
         {"method": "GET", "path": "/api/v1/variables/ports?host=", "description": "Grafana port dropdown"},
         {"method": "GET", "path": "/api/v1/uptime-kuma/sites", "description": "List Uptime Kuma monitors discovered from Prometheus"},
-        {"method": "PUT", "path": "/api/v1/uptime-kuma/sites/{monitor_name}", "body": {"name": "", "client": "", "account": ""}, "description": "Update Uptime Kuma monitor display metadata"},
+        {"method": "PUT", "path": "/api/v1/uptime-kuma/sites/{monitor_name}", "body": {"name": "", "customer": "", "environment": ""}, "description": "Update Uptime Kuma monitor display metadata"},
         {"method": "GET", "path": "/api/v1/uptime-kuma/sites/{monitor_name}/groups", "description": "List alert groups for a Uptime Kuma monitor"},
         {"method": "PUT", "path": "/api/v1/uptime-kuma/sites/{monitor_name}/groups", "body": {"group_ids": []}, "description": "Set alert groups for a Uptime Kuma monitor"},
         {"method": "GET", "path": "/api/v1/alert-settings", "description": "Get built-in alert thresholds and durations for the admin UI"},
         {"method": "PUT", "path": "/api/v1/alert-settings", "body": {"rules": {"high_cpu": {"enabled": True, "warning_threshold": 70, "critical_threshold": 90, "duration_minutes": 10}}}, "description": "Update built-in alert thresholds and sync Grafana"},
-        {"method": "GET", "path": "/api/v1/taxonomy", "description": "Clients and accounts overview"},
+        {"method": "GET", "path": "/api/v1/taxonomy", "description": "Customers and environments overview"},
         {"method": "POST", "path": "/api/v1/grafana/sync", "description": "Sync bundled dashboards, alert rules, and alert routing into Grafana"},
         {"method": "POST", "path": "/api/v1/grafana/dashboards/sync", "description": "Sync bundled dashboard JSON into Grafana"},
         {"method": "POST", "path": "/api/v1/grafana/alerts/sync", "description": "Sync source-defined alert rules and notification routing into Grafana"},
@@ -388,7 +388,7 @@ def _esc_label(v):
 @app.get("/metrics")
 async def metrics():
     """Prometheus exposition of authoritative node metadata, so alerts can be
-    enriched with display name / IP / client / account via a group_left join."""
+    enriched with display name / IP / customer / environment via a group_left join."""
     lines = [
         "# HELP monitor_node_info Authoritative node metadata from the central monitoring API",
         "# TYPE monitor_node_info gauge",
@@ -399,8 +399,8 @@ async def metrics():
             f'host="{host}",hostname="{host}",'
             f'name="{_esc_label(n.get("name") or n.get("hostname"))}",'
             f'ip="{_esc_label(n.get("ip"))}",'
-            f'client="{_esc_label(st.node_client(n))}",'
-            f'account="{_esc_label(st.node_account(n))}"'
+            f'customer="{_esc_label(st.node_customer(n))}",'
+            f'environment="{_esc_label(st.node_environment(n))}"'
         )
         lines.append(f"monitor_node_info{{{labels}}} 1")
     lines.extend([
@@ -412,8 +412,8 @@ async def metrics():
         labels = (
             f'monitor_name="{monitor_name}",site="{monitor_name}",'
             f'name="{_esc_label(s.get("name") or s.get("monitor_name"))}",'
-            f'client="{_esc_label(s.get("client"))}",'
-            f'account="{_esc_label(s.get("account"))}",'
+            f'customer="{_esc_label(s.get("customer"))}",'
+            f'environment="{_esc_label(s.get("environment"))}",'
             f'target="{_esc_label(s.get("target"))}",'
             f'monitor_type="{_esc_label(s.get("monitor_type"))}"'
         )
@@ -434,8 +434,8 @@ async def metrics():
                 f'name="{_esc_label(p.get("name") or port_name)}",'
                 f'address="{_esc_label(p.get("address"))}",'
                 f'module="{_esc_label(p.get("module", "tcp_connect"))}",'
-                f'client="{_esc_label(st.node_client(n))}",'
-                f'account="{_esc_label(st.node_account(n))}"'
+                f'customer="{_esc_label(st.node_customer(n))}",'
+                f'environment="{_esc_label(st.node_environment(n))}"'
             )
             lines.append(f"monitor_port_info{{{labels}}} 1")
     from fastapi.responses import PlainTextResponse
@@ -516,8 +516,8 @@ async def delete_silence_ep(silence_id: str):
 
 
 @app.get("/api/v1/command-center")
-async def command_center(client: str = "", account: str = ""):
-    return J(st.command_center(client, account))
+async def command_center(customer: str = "", environment: str = "", client: str = "", account: str = ""):
+    return J(st.command_center(customer=customer, environment=environment, client=client, account=account))
 
 
 @app.post("/api/v1/grafana/dashboards/sync")
@@ -546,13 +546,17 @@ async def sync_grafana_all(request: Request):
     if not _require_write_auth(request):
         return J({"error": "invalid or missing X-Monitor-Key"}, 401)
     dashboards = gf.sync_main_dashboards()
+    customer_orgs = gf.sync_all_customer_orgs()
     rules = gf.sync_alert_rules()
     routing_ok, routing_msg = _sync_alerting()
     return J({
         "dashboards": dashboards,
+        "customer_orgs": customer_orgs,
+        "client_orgs": customer_orgs,
         "alert_rules": rules,
         "routing": {"ok": routing_ok, "message": routing_msg},
-        "ok": all(r.get("ok") for r in dashboards) and all(r.get("ok") for r in rules) and routing_ok,
+        "ok": all(r.get("ok") for r in dashboards) and all(o.get("ok") for o in customer_orgs)
+               and all(r.get("ok") for r in rules) and routing_ok,
     })
 
 
@@ -634,20 +638,24 @@ async def update_server(host: str, request: Request):
         nodes.append(existing)
     # IP is set only at Alloy install/register — not editable from dashboards
     c, a, nm = st.normalize_metadata(
-        data.get("client", existing.get("client", "")),
-        data.get("account", existing.get("account", "")),
-        data.get("name", existing.get("name", "")),
+        customer=data.get("customer", existing.get("customer", "")),
+        environment=data.get("environment", existing.get("environment", "")),
+        name=data.get("name", existing.get("name", "")),
+        client=data.get("client"),
+        account=data.get("account"),
     )
-    if "client" in data or not existing.get("client"):
-        existing["client"] = c
-    if "account" in data or not existing.get("account"):
-        existing["account"] = a
+    if "customer" in data or "client" in data or not existing.get("customer"):
+        existing["customer"] = c
+    if "environment" in data or "account" in data or not existing.get("environment"):
+        existing["environment"] = a
+    existing.pop("client", None)
+    existing.pop("account", None)
     if "name" in data or not existing.get("name"):
         existing["name"] = nm or existing["hostname"]
     if data.get("hostname") and data["hostname"] != host:
         existing["hostname"] = st.normalize_host(data["hostname"])
     st.save_nodes(nodes)
-    st.record_taxonomy(existing.get("client", ""), existing.get("account", ""))
+    st.record_taxonomy(existing.get("customer", ""), existing.get("environment", ""))
     _sync_alerting()
     return J({"message": f"Saved {existing['hostname']}", "hostname": existing["hostname"]})
 
@@ -674,27 +682,37 @@ def _register(data, auto=False):
         if data.get("ip"):
             existing["ip"] = data["ip"]
         c, a, nm = st.normalize_metadata(
-            data.get("client") or existing.get("client", ""),
-            data.get("account") or existing.get("account", ""),
-            data.get("name") or existing.get("name", ""),
+            customer=data.get("customer") or existing.get("customer", ""),
+            environment=data.get("environment") or existing.get("environment", ""),
+            name=data.get("name") or existing.get("name", ""),
+            client=data.get("client"),
+            account=data.get("account"),
         )
-        existing["client"] = c
-        existing["account"] = a
+        existing["customer"] = c
+        existing["environment"] = a
+        existing.pop("client", None)
+        existing.pop("account", None)
         if nm:
             existing["name"] = nm
         existing["last_seen"] = TIMESTAMP()
         st.save_nodes(nodes)
-        st.record_taxonomy(existing["client"], existing["account"])
+        st.record_taxonomy(existing["customer"], existing["environment"])
         _sync_alerting()
         return J({"message": f"Updated {host}", "hostname": host})
 
-    c, a, nm = st.normalize_metadata(data.get("client", ""), data.get("account", ""), data.get("name", ""))
+    c, a, nm = st.normalize_metadata(
+        customer=data.get("customer", ""),
+        environment=data.get("environment", ""),
+        name=data.get("name", ""),
+        client=data.get("client"),
+        account=data.get("account"),
+    )
     entry = {
         "hostname": host,
         "ip": data.get("ip", ""),
         "name": nm or host,
-        "client": c,
-        "account": a,
+        "customer": c,
+        "environment": a,
         "registered": TIMESTAMP(),
         "last_seen": TIMESTAMP(),
     }
@@ -778,80 +796,120 @@ def _delete_port(host, name):
     return J({"message": f"Removed '{name}'"})
 
 
-# ---- taxonomy ---------------------------------------------------------------
+# ---- taxonomy (customers/environments; legacy clients/accounts aliases) -------
 
 @app.get("/api/v1/taxonomy")
 async def taxonomy():
     return J(st.taxonomy_overview())
 
 
-@app.post("/api/v1/taxonomy/clients")
-async def add_client(request: Request):
+@app.post("/api/v1/taxonomy/customers")
+async def add_customer(request: Request):
     data = await _body(request)
-    c, err = st.add_taxonomy_client(data.get("name", ""))
+    c, err = st.add_taxonomy_customer(data.get("name", ""))
     if err:
         return J({"error": err}, 400)
-    return J({"message": f"Client '{c}' added", "name": c}, 201)
+    return J({"message": f"Customer '{c}' added", "name": c}, 201)
+
+
+@app.post("/api/v1/taxonomy/clients")
+async def add_client_legacy(request: Request):
+    return await add_customer(request)
+
+
+@app.put("/api/v1/taxonomy/customers/{customer}")
+async def rename_customer(customer: str, request: Request):
+    data = await _body(request)
+    err = st.rename_taxonomy_customer(customer, data.get("new_name", ""))
+    if err:
+        return J({"error": err}, 400)
+    return J({"message": f"Customer renamed to '{data.get('new_name')}'"})
 
 
 @app.put("/api/v1/taxonomy/clients/{client}")
-async def rename_client(client: str, request: Request):
-    data = await _body(request)
-    err = st.rename_taxonomy_client(client, data.get("new_name", ""))
+async def rename_client_legacy(client: str, request: Request):
+    return await rename_customer(client, request)
+
+
+@app.delete("/api/v1/taxonomy/customers/{customer}")
+async def delete_customer(customer: str, merge_into: str = ""):
+    err = st.delete_taxonomy_customer(customer, merge_into=merge_into or None)
     if err:
         return J({"error": err}, 400)
-    return J({"message": f"Client renamed to '{data.get('new_name')}'"})
+    return J({"message": "Customer removed"})
 
 
 @app.delete("/api/v1/taxonomy/clients/{client}")
-async def delete_client(client: str, merge_into: str = ""):
-    err = st.delete_taxonomy_client(client, merge_into=merge_into or None)
+async def delete_client_legacy(client: str, merge_into: str = ""):
+    return await delete_customer(client, merge_into)
+
+
+@app.post("/api/v1/taxonomy/customers/{customer}/environments")
+async def add_environment(customer: str, request: Request):
+    data = await _body(request)
+    env, err = st.add_taxonomy_environment(customer, data.get("name", ""))
     if err:
         return J({"error": err}, 400)
-    return J({"message": "Client removed"})
+    return J({"message": f"Environment '{env}' added under '{customer}'", "name": env}, 201)
 
 
 @app.post("/api/v1/taxonomy/clients/{client}/accounts")
-async def add_account(client: str, request: Request):
+async def add_account_legacy(client: str, request: Request):
+    return await add_environment(client, request)
+
+
+@app.put("/api/v1/taxonomy/customers/{customer}/environments/{environment}")
+async def rename_environment(customer: str, environment: str, request: Request):
     data = await _body(request)
-    acc, err = st.add_taxonomy_account(client, data.get("name", ""))
+    err = st.rename_taxonomy_environment(customer, environment, data.get("new_name", ""))
     if err:
         return J({"error": err}, 400)
-    return J({"message": f"Account '{acc}' added under '{client}'", "name": acc}, 201)
+    return J({"message": f"Environment renamed to '{data.get('new_name')}'"})
 
 
 @app.put("/api/v1/taxonomy/clients/{client}/accounts/{account}")
-async def rename_account(client: str, account: str, request: Request):
-    data = await _body(request)
-    err = st.rename_taxonomy_account(client, account, data.get("new_name", ""))
+async def rename_account_legacy(client: str, account: str, request: Request):
+    return await rename_environment(client, account, request)
+
+
+@app.delete("/api/v1/taxonomy/customers/{customer}/environments/{environment}")
+async def delete_environment(customer: str, environment: str, merge_into: str = ""):
+    err = st.delete_taxonomy_environment(customer, environment, merge_into=merge_into or None)
     if err:
         return J({"error": err}, 400)
-    return J({"message": f"Account renamed to '{data.get('new_name')}'"})
+    return J({"message": "Environment removed"})
 
 
 @app.delete("/api/v1/taxonomy/clients/{client}/accounts/{account}")
-async def delete_account(client: str, account: str, merge_into: str = ""):
-    err = st.delete_taxonomy_account(client, account, merge_into=merge_into or None)
-    if err:
-        return J({"error": err}, 400)
-    return J({"message": "Account removed"})
+async def delete_account_legacy(client: str, account: str, merge_into: str = ""):
+    return await delete_environment(client, account, merge_into)
 
 
-# ---- v1 variables -----------------------------------------------------------
+# ---- v1 variables (customers/environments; legacy clients/accounts aliases) -
+
+@app.get("/api/v1/variables/customers")
+async def var_customers():
+    return J([{"__text": c, "__value": c} for c in st.list_all_customers()])
+
 
 @app.get("/api/v1/variables/clients")
-async def var_clients():
-    return J([{"__text": c, "__value": c} for c in st.list_all_clients()])
+async def var_clients_legacy():
+    return await var_customers()
+
+
+@app.get("/api/v1/variables/environments")
+async def var_environments(customer: str = "", client: str = ""):
+    return J([{"__text": a, "__value": a} for a in st.list_environments_for_customer(customer or client)])
 
 
 @app.get("/api/v1/variables/accounts")
-async def var_accounts(client: str = ""):
-    return J([{"__text": a, "__value": a} for a in st.list_accounts_for_client(client)])
+async def var_accounts_legacy(client: str = "", customer: str = ""):
+    return await var_environments(customer=customer or client)
 
 
 @app.get("/api/v1/variables/hosts")
-async def var_hosts(client: str = "", account: str = ""):
-    return J(_hosts_variable(client, account))
+async def var_hosts(customer: str = "", environment: str = "", client: str = "", account: str = ""):
+    return J(_hosts_variable(customer or client, environment or account))
 
 
 @app.get("/api/v1/variables/ports")
@@ -866,8 +924,8 @@ async def var_ports(host: str = ""):
 # ---- Uptime Kuma sites ------------------------------------------------------
 
 @app.get("/api/v1/uptime-kuma/sites")
-async def list_kuma_sites(client: str = "", account: str = ""):
-    sites = st.list_kuma_sites(client, account)
+async def list_kuma_sites(customer: str = "", environment: str = "", client: str = "", account: str = ""):
+    sites = st.list_kuma_sites(customer=customer or client, environment=environment or account)
     return J({"sites": sites, "count": len(sites)})
 
 
@@ -924,8 +982,8 @@ async def put_alert_settings(request: Request):
 # ---- legacy -----------------------------------------------------------------
 
 @app.get("/nodes")
-async def legacy_nodes(client: str = "", account: str = ""):
-    nodes = st.filter_nodes(st.sync_prom_hosts(), client, account)
+async def legacy_nodes(customer: str = "", environment: str = "", client: str = "", account: str = ""):
+    nodes = st.filter_nodes(st.sync_prom_hosts(), customer=customer or client, environment=environment or account)
     return J({"nodes": nodes})
 
 
@@ -935,41 +993,61 @@ async def legacy_hosts():
     return J({"hosts": [{"host": n["hostname"], "count": len(st.load_ports(n["hostname"]))} for n in nodes]})
 
 
+@app.get("/customer-environments")
+async def customer_environments(customer: str = "", client: str = ""):
+    c = (customer or client or "").strip()
+    nodes = [n for n in st.load_nodes() if (n.get("customer") or "").strip() == c]
+    envs = sorted({(n.get("environment") or "").strip() for n in nodes if (n.get("environment") or "").strip()})
+    return J([{"__text": a, "__value": a} for a in envs])
+
+
 @app.get("/client-accounts")
-async def client_accounts(client: str = ""):
-    c = (client or "").strip()
-    nodes = [n for n in st.load_nodes() if (n.get("client") or "").strip() == c]
-    accts = sorted({(n.get("account") or "").strip() for n in nodes if (n.get("account") or "").strip()})
-    return J([{"__text": a, "__value": a} for a in accts])
+async def client_accounts_legacy(client: str = "", customer: str = ""):
+    return await customer_environments(customer or client)
 
 
-@app.get("/client-hosts")
-async def client_hosts(client: str = "", account: str = ""):
-    c = (client or "").strip()
-    a = (account or "").strip()
+@app.get("/customer-hosts")
+async def customer_hosts(customer: str = "", environment: str = "", client: str = "", account: str = ""):
+    c = (customer or client or "").strip()
+    a = (environment or account or "").strip()
     if a in (".*", "$__all", "All"):
         a = ""
-    nodes = [n for n in st.load_nodes() if (n.get("client") or "").strip() == c]
+    nodes = [n for n in st.load_nodes() if (n.get("customer") or "").strip() == c]
     if a:
-        nodes = [n for n in nodes if (n.get("account") or "").strip() == a]
+        nodes = [n for n in nodes if (n.get("environment") or "").strip() == a]
     return J([{"__text": st.host_display(n), "__value": n["hostname"]}
               for n in sorted(nodes, key=lambda x: st.host_display(x))])
 
 
+@app.get("/client-hosts")
+async def client_hosts_legacy(client: str = "", account: str = "", customer: str = "", environment: str = ""):
+    return await customer_hosts(customer=customer or client, environment=environment or account)
+
+
 @app.get("/hosts-list")
-async def hosts_list(client: str = "", account: str = "", include_unregistered: str = ""):
+async def hosts_list(customer: str = "", environment: str = "", client: str = "", account: str = "", include_unregistered: str = ""):
     inc = include_unregistered.lower() in ("1", "true", "yes")
-    return J(_hosts_variable(client, account, include_unregistered=inc))
+    return J(_hosts_variable(customer or client, environment or account, include_unregistered=inc))
+
+
+@app.get("/customers-list")
+async def customers_list():
+    return J([{"__text": c, "__value": c} for c in st.list_all_customers()])
 
 
 @app.get("/clients-list")
-async def clients_list():
-    return J([{"__text": c, "__value": c} for c in st.list_all_clients()])
+async def clients_list_legacy():
+    return await customers_list()
+
+
+@app.get("/environments-list")
+async def environments_list(customer: str = "", client: str = ""):
+    return J([{"__text": a, "__value": a} for a in st.list_environments_for_customer(customer or client)])
 
 
 @app.get("/accounts-list")
-async def accounts_list(client: str = ""):
-    return J([{"__text": a, "__value": a} for a in st.list_accounts_for_client(client)])
+async def accounts_list_legacy(client: str = "", customer: str = ""):
+    return await environments_list(customer or client)
 
 
 @app.get("/targets/{host}")
@@ -980,8 +1058,9 @@ async def legacy_targets(host: str):
 @app.get("/metadata/{host}")
 async def legacy_metadata(host: str):
     node = st.find_node(st.load_nodes(), host) or {}
-    return J({"hostname": host, "account": node.get("account", ""), "name": node.get("name", ""),
-              "ip": node.get("ip", ""), "client": node.get("client", "")})
+    return J({"hostname": host, "environment": node.get("environment", ""), "name": node.get("name", ""),
+              "ip": node.get("ip", ""), "customer": node.get("customer", ""),
+              "account": node.get("environment", ""), "client": node.get("customer", "")})
 
 
 @app.get("/ports/{host}")
@@ -1117,9 +1196,14 @@ async def grafana_orgs_status():
     for o in orgs:
         if o["id"] == 1:
             continue
-        client_name = o["name"].replace("Client - ", "") if o["name"].startswith("Client - ") else o["name"]
-        sc = sum(1 for n in nodes if (n.get("client") or "").strip() == client_name)
-        cfg = saved.get(client_name, {})
+        if o["name"].startswith("Customer - "):
+            customer_name = o["name"].replace("Customer - ", "", 1)
+        elif o["name"].startswith("Client - "):
+            customer_name = o["name"].replace("Client - ", "", 1)
+        else:
+            customer_name = o["name"]
+        sc = sum(1 for n in nodes if (n.get("customer") or "").strip() == customer_name)
+        cfg = saved.get(customer_name, {})
         login = cfg.get("login", "")
         dash = cfg.get("dashboard_url", "")
         if not login:
@@ -1128,57 +1212,58 @@ async def grafana_orgs_status():
             if viewer:
                 login = viewer.get("login", "")
         if not dash:
-            dash = f"/d/client-{client_name.lower().replace(' ', '-')}-summary/my-servers"
-        result.append({"org_id": o["id"], "org_name": o["name"], "client": client_name,
-                       "server_count": sc, "login": login, "dashboard_url": dash})
+            dash = gf._customer_default_dashboard_url(customer_name)
+        result.append({"org_id": o["id"], "org_name": o["name"], "customer": customer_name,
+                       "client": customer_name, "server_count": sc, "login": login, "dashboard_url": dash})
     return J({"orgs": result})
 
 
 @app.post("/api/v1/grafana-orgs")
 async def grafana_orgs_create(request: Request):
     data = await _body(request)
-    client = (data.get("client") or "").strip()
+    customer = (data.get("customer") or data.get("client") or "").strip()
     password = (data.get("password") or "ChangeMe@2026").strip()
-    if not client:
-        return J({"error": "client required"}, 400)
-    org_name = f"Client - {client}"
+    if not customer:
+        return J({"error": "customer required"}, 400)
+    org_name = f"Customer - {customer}"
     org_id, msg = gf._grafana_create_org(org_name)
     if not org_id:
         return J({"error": f"create org: {msg}"}, 500)
-    gf._grafana_switch_org(org_id)
-    prom_uid, _ = gf._grafana_add_datasource(org_id, "Prometheus", "prometheus", "http://localhost:9090", True)
-    inf_uid, _ = gf._grafana_add_datasource(org_id, "Port Monitor API", "yesoreyeram-infinity-datasource", "http://localhost:9099")
-    dash = gf._build_client_dashboard(client, prom_uid, inf_uid)
-    ok, url = gf._grafana_deploy_dashboard(org_id, dash)
-    fleet = gf._build_client_fleet_dashboard(client, prom_uid, inf_uid)
-    gf._grafana_deploy_dashboard(org_id, fleet)
-    for dd in gf._build_client_drilldowns(client, prom_uid, inf_uid):
-        gf._grafana_deploy_dashboard(org_id, dd)
-    login = f"{client.lower().replace(' ', '-')}-client"
-    user_id, umsg = gf._grafana_create_user(login, f"{client} Client", password)
+    provision = gf.sync_customer_org_dashboards(customer, org_id)
+    if not provision.get("ok"):
+        return J({"error": "customer org created but dashboard deploy failed", "detail": provision}, 500)
+    summary = next((d for d in provision.get("dashboards", []) if d.get("title") == "Fleet Overview - All Servers"), None)
+    url = (summary or {}).get("message") or gf._customer_default_dashboard_url(customer)
+    prom_uid = provision.get("prom_uid", "")
+    inf_uid = provision.get("inf_uid", "")
+    login = f"{customer.lower().replace(' ', '-')}-customer"
+    user_id, umsg = gf._grafana_create_user(login, f"{customer} Customer", password)
     if user_id:
         gf._grafana_add_user_to_org(org_id, login, "Viewer")
         gf._grafana_remove_user_from_org(1, user_id)
     cfg = {"org_id": org_id, "prom_uid": prom_uid, "inf_uid": inf_uid,
            "login": login, "password": password, "dashboard_url": url}
     existing = st._read_json(GRAFANA_ORGS_FILE, {})
-    existing[client] = cfg
+    existing[customer] = cfg
     st._write_json(GRAFANA_ORGS_FILE, existing)
     gf._grafana_switch_org(1)
-    return J({"message": f"Client org '{org_name}' created", "org_id": org_id,
-              "login": login, "password": password, "dashboard_url": url}, 201)
+    return J({"message": f"Customer org '{org_name}' created", "org_id": org_id,
+              "customer": customer, "login": login, "password": password, "dashboard_url": url}, 201)
 
 
-@app.delete("/api/v1/grafana-orgs/{client}")
-async def grafana_orgs_delete(client: str):
+@app.delete("/api/v1/grafana-orgs/{customer}")
+async def grafana_orgs_delete(customer: str):
     existing = st._read_json(GRAFANA_ORGS_FILE, {})
-    org_cfg = existing.get(client)
+    org_cfg = existing.get(customer)
     if not org_cfg:
         orgs = gf._grafana_list_orgs()
-        org_name = f"Client - {client}"
+        org_name = f"Customer - {customer}"
         found = next((o for o in orgs if o["name"] == org_name), None)
         if not found:
-            return J({"error": f"No org found for client '{client}'"}, 404)
+            org_name = f"Client - {customer}"
+            found = next((o for o in orgs if o["name"] == org_name), None)
+        if not found:
+            return J({"error": f"No org found for customer '{customer}'"}, 404)
         org_cfg = {"org_id": found["id"]}
     org_id = org_cfg.get("org_id")
     login = org_cfg.get("login")
@@ -1187,7 +1272,7 @@ async def grafana_orgs_delete(client: str):
         if uid:
             gf._grafana_req("DELETE", f"/api/admin/users/{uid}")
     gf._grafana_delete_org(org_id)
-    existing.pop(client, None)
+    existing.pop(customer, None)
     st._write_json(GRAFANA_ORGS_FILE, existing)
     gf._grafana_switch_org(1)
-    return J({"message": f"Client org for '{client}' deleted"})
+    return J({"message": f"Customer org for '{customer}' deleted"})

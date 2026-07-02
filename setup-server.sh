@@ -166,7 +166,7 @@ sleep 2
 systemctl is-active --quiet port-monitor-api || die "API failed: journalctl -u port-monitor-api -n 20"
 ok "Central Monitoring API (FastAPI) on :9099"
 
-# ---- Step 2c: scrape API node-metadata so alerts carry name/ip/client/account
+# ---- Step 2c: scrape API node-metadata so alerts carry name/ip/customer/environment
 if [ -f /etc/prometheus/prometheus.yml ] && ! grep -q "job_name: monitor-api" /etc/prometheus/prometheus.yml; then
   cat >> /etc/prometheus/prometheus.yml << 'PROMEOF'
 
@@ -299,8 +299,8 @@ if [ -f "$INSTALL_SCRIPT" ]; then
     -api-url="http://127.0.0.1:9099" \
     -loki="${GRAFANA_URL%/}/loki/api/v1/push" \
     -install-token="${INSTALL_TOKEN}" \
-    -client=internal \
-    -account=default || warn "Alloy install had warnings — check: journalctl -u alloy -n 30"
+    -customer=internal \
+    -environment=default || warn "Alloy install had warnings — check: journalctl -u alloy -n 30"
   systemctl enable alloy 2>/dev/null || true
   systemctl is-active --quiet alloy && ok "Alloy running on central host" || warn "Alloy not running — run install-alloy.sh manually"
 else
@@ -393,13 +393,13 @@ echo ""
 echo "  API key (for curl / automation — optional):"
 echo "    ${API_KEY}"
 echo ""
-echo "  Install Alloy on a node (set name/client/account in Grafana after):"
+echo "  Install Alloy on a node (set name/customer/environment in Grafana after):"
 echo "    curl -fsSL .../install-alloy.sh | sudo bash -s -- \\"
 echo "      -remote-write=http://${SERVER_IP}:9090/api/v1/write \\"
 echo "      -install-token=${INSTALL_TOKEN}"
 echo ""
 echo "  Then in Grafana → Server Drill-Down → section"
-echo "  'Client · Account · Display Name — edit here'"
+echo "  'Customer · Environment · Display Name — edit here'"
 echo ""
 echo "  Security: restrict port 9099 to your VPC/office (ufw/security group)."
 echo "  Dashboards: All Servers + Server Drill-Down (7 panels) — no separate admin dashboard."

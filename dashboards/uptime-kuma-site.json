@@ -29,7 +29,7 @@
         "sort": 1
       },
       {
-        "name": "client",
+        "name": "customer",
         "type": "query",
         "label": "Customer",
         "hide": 2,
@@ -45,9 +45,9 @@
         "sort": 1
       },
       {
-        "name": "account",
+        "name": "environment",
         "type": "query",
-        "label": "Account",
+        "label": "Environment",
         "hide": 2,
         "datasource": {
           "type": "prometheus",
@@ -72,7 +72,7 @@
       },
       "id": 100,
       "options": {
-        "content": "<div style=\"display:flex;align-items:flex-end;gap:24px;padding:8px 18px 0;border-bottom:1px solid rgba(255,255,255,0.08);font-family:Inter,system-ui,sans-serif;font-size:14px;\"><a style=\"color:#fff;text-decoration:none;padding:6px 2px 8px;border-bottom:2px solid #f59e0b;font-weight:600;\">Site summary</a><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 8px;\" href=\"/d/uptime-kuma-source/uptime-kuma?var-monitor=${monitor}&${__url_time_range}\">Site source</a><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 8px;\" href=\"/d/alloy-fleet/fleet-overview-all-servers?var-client=${client}&var-account=${account}&${__url_time_range}\">Fleet overview</a></div>",
+        "content": "<div style=\"display:flex;align-items:flex-end;gap:24px;padding:8px 18px 0;border-bottom:1px solid rgba(255,255,255,0.08);font-family:Inter,system-ui,sans-serif;font-size:14px;\"><a style=\"color:#fff;text-decoration:none;padding:6px 2px 8px;border-bottom:2px solid #f59e0b;font-weight:600;\">Site summary</a><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 8px;\" href=\"/d/uptime-kuma-source/uptime-kuma?var-monitor=${monitor}&${__url_time_range}\">Site source</a><a style=\"color:rgba(255,255,255,0.65);text-decoration:none;padding:6px 2px 8px;\" href=\"/d/alloy-fleet/fleet-overview-all-servers?var-customer=${customer}&var-environment=${environment}&${__url_time_range}\">Fleet overview</a></div>",
         "mode": "html"
       },
       "title": "",
@@ -416,8 +416,8 @@
             "indexByName": {
               "monitor_name": 0,
               "name": 1,
-              "client": 2,
-              "account": 3,
+              "customer": 2,
+              "environment": 3,
               "monitor_type": 4,
               "target": 5,
               "Value #Status": 6,
@@ -426,8 +426,8 @@
             "renameByName": {
               "monitor_name": "Monitor",
               "name": "Display Name",
-              "client": "Customer",
-              "account": "Account",
+              "customer": "Customer",
+              "environment": "Account",
               "monitor_type": "Type",
               "target": "Target",
               "Value #Status": "Status",

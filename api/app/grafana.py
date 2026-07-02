@@ -1,6 +1,6 @@
-"""Grafana Admin API helpers + client dashboard builder.
+"""Grafana Admin API helpers + customer dashboard builder.
 
-Used to create/delete per-client orgs (org-per-client multi-tenancy) with
+Used to create/delete per-customer orgs (org-per-customer multi-tenancy) with
 isolated read-only dashboards, all driven from the embedded UI.
 """
 
@@ -8,6 +8,7 @@ import base64
 from datetime import datetime, timedelta, timezone
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -119,13 +120,72 @@ def _grafana_list_orgs():
     return data if isinstance(data, list) else []
 
 
-def _grafana_add_datasource(org_id, name, ds_type, url, is_default=False):
+def _service_urls():
+    """URLs reachable from the Grafana container (server-side proxy datasources)."""
+    cfg = load_config()
+    prom = (os.environ.get("MONITOR_PROMETHEUS_URL") or "http://prometheus:9090").rstrip("/")
+    api = (os.environ.get("MONITOR_API_INTERNAL_URL") or "http://monitor-api:9099").rstrip("/")
+    public = (cfg.get("public_url") or api).rstrip("/")
+    return prom, api, public
+
+
+def _infinity_datasource_body(url):
+    prom, api, public = _service_urls()
+    hosts = {
+        api, public,
+        api.replace("http://", "").replace("https://", ""),
+        public.replace("http://", "").replace("https://", ""),
+        "http://monitor-api:9099", "monitor-api:9099", "monitor-api",
+        "http://localhost:9099", "localhost:9099", "127.0.0.1:9099",
+    }
+    if public.startswith("https://"):
+        hosts.add(public.replace("https://", "http://", 1))
+    return {
+        "name": "Port Monitor API",
+        "type": "yesoreyeram-infinity-datasource",
+        "access": "proxy",
+        "url": url,
+        "jsonData": {
+            "auth_method": "none",
+            "allowedHosts": sorted(h for h in hosts if h),
+        },
+    }
+
+
+def _grafana_add_datasource(org_id, name, ds_type, url, is_default=False, json_data=None):
     _grafana_switch_org(org_id)
-    _, data = _grafana_req("POST", "/api/datasources", {
+    body = {
         "name": name, "type": ds_type,
-        "access": "proxy", "url": url, "isDefault": is_default
-    })
+        "access": "proxy", "url": url, "isDefault": is_default,
+    }
+    if json_data:
+        body["jsonData"] = json_data
+    _, data = _grafana_req("POST", "/api/datasources", body)
     return data.get("datasource", {}).get("uid", ""), data.get("message", str(data))
+
+
+def _grafana_upsert_datasource(org_id, name, ds_type, url, is_default=False, json_data=None):
+    _grafana_switch_org(org_id)
+    status, existing = _grafana_req("GET", f"/api/datasources/name/{urllib.parse.quote(name)}")
+    body = {
+        "name": name, "type": ds_type,
+        "access": "proxy", "url": url, "isDefault": is_default,
+        "orgId": org_id,
+    }
+    if json_data:
+        body["jsonData"] = json_data
+    if status == 200 and isinstance(existing, dict) and existing.get("id"):
+        body["id"] = existing["id"]
+        body["uid"] = existing.get("uid")
+        body["version"] = existing.get("version", 1)
+        put_status, data = _grafana_req("PUT", f"/api/datasources/uid/{existing['uid']}", body)
+        if put_status not in (200, 201):
+            put_status, data = _grafana_req("PUT", f"/api/datasources/{existing['id']}", body)
+    else:
+        put_status, data = _grafana_req("POST", "/api/datasources", body)
+    ds = data.get("datasource", data) if isinstance(data, dict) else {}
+    msg = data.get("message", str(data)) if isinstance(data, dict) else str(data)
+    return ds.get("uid", existing.get("uid", "") if isinstance(existing, dict) else ""), msg
 
 
 def _grafana_deploy_dashboard(org_id, dashboard_json):
@@ -162,8 +222,38 @@ def _grafana_list_org_users(org_id):
     return data if isinstance(data, list) else []
 
 
-def _client_slug(client):
-    return client.lower().replace(' ', '-')
+def _customer_slug(customer):
+    return customer.lower().replace(' ', '-')
+
+
+_client_slug = _customer_slug
+
+
+def _customer_host_regex(customer):
+    """Regex for this customer's hostnames (used as Grafana host variable allValue)."""
+    from . import storage as st
+    hosts = [n["hostname"] for n in st.load_nodes() if st.node_customer(n) == customer]
+    if not hosts:
+        return "__no_such_host__"
+    return "|".join(re.escape(h) for h in hosts)
+
+
+_client_host_regex = _customer_host_regex
+
+
+def _customer_default_host(customer):
+    from . import storage as st
+    hosts = sorted(
+        [n for n in st.load_nodes() if st.node_customer(n) == customer],
+        key=lambda n: st.host_display(n),
+    )
+    if not hosts:
+        return "", ""
+    n = hosts[0]
+    return n["hostname"], st.host_display(n)
+
+
+_client_default_host = _customer_default_host
 
 
 import os as _os
@@ -187,7 +277,59 @@ def _resolve_dashboards_dir():
 _DASHBOARDS_DIR = _resolve_dashboards_dir()
 _ALERTS_DIR = _os.path.join(_os.path.dirname(__file__), "alerts")
 
-# main drill-down template files -> client-scoped uid suffix
+# Known exported datasource UIDs (replaced when cloning dashboards into customer orgs).
+_MAIN_PROM_UIDS = ("PBFA97CFB590B2093",)
+_MAIN_INF_UIDS = ("P79940EC37D9FBFF2", "cfmmi8ef0wxz4a")
+
+
+def _customer_dashboard_uids(customer):
+    slug = _customer_slug(customer)
+    return {f"customer-{slug}-fleet"} | {f"customer-{slug}-{sfx}" for _, sfx in _DRILLDOWNS}
+
+
+_client_dashboard_uids = _customer_dashboard_uids
+
+
+def _customer_default_dashboard_url(customer):
+    slug = _customer_slug(customer)
+    return f"/d/customer-{slug}-fleet/fleet-overview-all-servers"
+
+
+_client_default_dashboard_url = _customer_default_dashboard_url
+
+
+def _rewrite_dashboard_sources(raw, prom_uid, inf_uid, api_url="", extra_prom=(), extra_inf=()):
+    """Swap exported/main-org datasource UIDs and API URLs for the target org."""
+    for uid in (*_MAIN_PROM_UIDS, *extra_prom):
+        if uid and uid != prom_uid:
+            raw = raw.replace(uid, prom_uid)
+    for uid in (*_MAIN_INF_UIDS, *extra_inf):
+        if uid and uid != inf_uid:
+            raw = raw.replace(uid, inf_uid)
+    api_url = (api_url or "").rstrip("/")
+    if api_url:
+        raw = raw.replace("http://localhost:9099", api_url)
+        raw = raw.replace("__MONITOR_API_PUBLIC_URL__", api_url)
+    return raw
+
+
+def _prune_customer_org_dashboards(customer, org_id):
+    """Remove dashboards that are not part of the customer portal set."""
+    allowed = _customer_dashboard_uids(customer)
+    _grafana_switch_org(org_id)
+    status, results = _grafana_req("GET", "/api/search?type=dash-db")
+    if status != 200 or not isinstance(results, list):
+        return []
+    removed = []
+    for item in results:
+        uid = (item.get("uid") or "").strip()
+        if uid and uid not in allowed:
+            _grafana_req("DELETE", f"/api/dashboards/uid/{uid}")
+            removed.append(uid)
+    return removed
+
+
+# main drill-down template files -> customer-scoped uid suffix
 _DRILLDOWNS = [
     ("summary.json", "dd-summary"),
     ("cpu.json", "dd-cpu"),
@@ -198,7 +340,7 @@ _DRILLDOWNS = [
     ("processes.json", "dd-proc"),
 ]
 
-# main uid token -> client suffix (used to rewrite the dashboard uid + nav links)
+# main uid token -> customer suffix (used to rewrite the dashboard uid + nav links)
 _UID_TOKENS = {
     "alloy-drilldown": "dd-summary",
     "alloy-dd-proc": "dd-proc",
@@ -210,21 +352,28 @@ _UID_TOKENS = {
 }
 
 
-def _client_drilldown_vars(client, prom_uid, inf_uid, with_port=False, with_process=False):
+def _customer_drilldown_vars(customer, prom_uid, inf_uid, with_port=False, with_process=False):
     inf = {"type": "yesoreyeram-infinity-datasource", "uid": inf_uid}
     prom = {"type": "prometheus", "uid": prom_uid}
-    base = "http://localhost:9099"
+    _, base, _ = _service_urls()
+    default_host, default_label = _customer_default_host(customer)
+    host_current = (
+        {"text": default_label, "value": default_host}
+        if default_host
+        else {"text": "", "value": ""}
+    )
     vlist = [
-        {"name": "client", "type": "constant", "query": client,
-         "current": {"text": client, "value": client}, "hide": 2},
-        {"name": "account", "type": "query", "label": "Account", "datasource": inf,
+        {"name": "customer", "type": "constant", "query": customer,
+         "current": {"text": customer, "value": customer}, "hide": 2},
+        {"name": "environment", "type": "query", "label": "Environment", "datasource": inf,
          "includeAll": True, "allValue": ".*", "current": {"text": "All", "value": "$__all"},
          "query": {"infinityQuery": {"refId": "variable", "source": "url", "type": "json",
-            "url": f"{base}/client-accounts?client={client}"}, "queryType": "infinity", "type": "infinity"},
+            "url": f"{base}/customer-environments?customer={customer}"}, "queryType": "infinity", "type": "infinity"},
          "refresh": 1, "sort": 0},
         {"name": "host", "type": "query", "label": "Host", "datasource": inf, "includeAll": False,
+         "current": host_current,
          "query": {"infinityQuery": {"refId": "variable", "source": "url", "type": "json",
-            "url": f"{base}/client-hosts?client={client}&account=${{account}}"}, "queryType": "infinity", "type": "infinity"},
+            "url": f"{base}/customer-hosts?customer={customer}&environment=${{environment}}"}, "queryType": "infinity", "type": "infinity"},
          "refresh": 1, "sort": 0},
     ]
     if with_port:
@@ -245,80 +394,113 @@ def _client_drilldown_vars(client, prom_uid, inf_uid, with_port=False, with_proc
     return vlist
 
 
-def _build_client_drilldowns(client, prom_uid, inf_uid):
-    """Transform the main-org drill-down dashboards into client-scoped copies.
+_client_drilldown_vars = _customer_drilldown_vars
 
-    The main drill-down panels already filter only by host="$host"; the client and
-    account variables merely drive the host dropdown. So per client org we:
+
+def _build_customer_drilldowns(customer, prom_uid, inf_uid):
+    """Transform the main-org drill-down dashboards into customer-scoped copies.
+
+    The main drill-down panels already filter only by host="$host"; the customer and
+    environment variables merely drive the host dropdown. So per customer org we:
       * point datasources at the org's Prometheus + Infinity UIDs,
-      * rescope the client/account/host variables to this client (via the API),
-      * rewrite the dashboard uid and the nav-bar links to client-scoped uids.
+      * rescope the customer/environment/host variables to this customer (via the API),
+      * rewrite the dashboard uid and the nav-bar links to customer-scoped uids.
     Returns a list of dashboard payloads ready for POST /api/dashboards/db.
     """
-    slug = _client_slug(client)
+    slug = _customer_slug(customer)
     payloads = []
+    _grafana_switch_org(1)
+    main_prom = _datasource_uid_by_name("Prometheus", _MAIN_PROM_UIDS[0])
+    main_inf = _datasource_uid_by_name("Port Monitor API", _MAIN_INF_UIDS[0])
     for fname, suffix in _DRILLDOWNS:
         path = _os.path.join(_DASHBOARDS_DIR, fname)
         if not _os.path.exists(path):
             continue
         with open(path, encoding="utf-8") as f:
             raw = f.read()
-        raw = raw.replace("__PROM_DS_UID__", prom_uid).replace("__INFINITY_DS_UID__", inf_uid)
-        # rewrite every main uid token -> client-scoped uid (covers own uid + nav links)
+        _, api_base, public_url = _service_urls()
+        raw = _rewrite_dashboard_sources(
+            raw, prom_uid, inf_uid, api_base,
+            extra_prom=(main_prom,), extra_inf=(main_inf,),
+        )
+        raw = (
+            raw.replace("__PROM_DS_UID__", prom_uid)
+            .replace("__INFINITY_DS_UID__", inf_uid)
+            .replace("__MONITOR_API_PUBLIC_URL__", public_url)
+        )
+        # rewrite every main uid token -> customer-scoped uid (covers own uid + nav links)
         for token, sfx in _UID_TOKENS.items():
-            raw = raw.replace(token, f"client-{slug}-{sfx}")
-        obj = json.loads(raw)
-        d = obj["dashboard"]
-        d["templating"] = {"list": _client_drilldown_vars(
-            client,
+            raw = raw.replace(token, f"customer-{slug}-{sfx}")
+        parsed = json.loads(raw)
+        if isinstance(parsed.get("dashboard"), dict):
+            d = parsed["dashboard"]
+            payload = parsed
+        else:
+            d = parsed
+            payload = {"dashboard": d}
+        d["templating"] = {"list": _customer_drilldown_vars(
+            customer,
             prom_uid,
             inf_uid,
             with_port=(suffix == "dd-port"),
             with_process=(suffix == "dd-proc"),
         )}
-        # client viewers are read-only: strip the embedded server-editor row (id 90)
+        # customer viewers are read-only: strip the embedded server-editor row (id 90)
         d["panels"] = [p for p in d.get("panels", []) if p.get("id") != 90]
-        d.pop("id", None)
-        obj.pop("folderUid", None)
-        obj["overwrite"] = True
-        payloads.append(obj)
+        _strip_dashboard_runtime_fields(d)
+        payload.pop("folderUid", None)
+        payload["overwrite"] = True
+        payloads.append(payload)
     return payloads
 
 
-def _build_client_fleet_dashboard(client, prom_uid, inf_uid):
-    """Build a client-scoped 'Fleet Overview - All Servers' dashboard.
+_build_client_drilldowns = _build_customer_drilldowns
+
+
+def _build_customer_fleet_dashboard(customer, prom_uid, inf_uid):
+    """Build a customer-scoped 'Fleet Overview - All Servers' dashboard.
 
     Servers are scoped by *host membership from the central API* (the authoritative
-    record of which servers belong to a client), not by the metric `client` label.
-    This means assigning a server to a client in the management UI takes effect
+    record of which servers belong to a customer), not by the metric `customer` label.
+    This means assigning a server to a customer in the management UI takes effect
     immediately, without re-installing Alloy on the node. The `host` variable is
-    populated from /client-hosts?client=<client>, so selecting "All" expands to
-    exactly this client's servers.
+    populated from /customer-hosts?customer=<customer>, so selecting "All" expands to
+    exactly this customer's servers.
     """
-    slug = _client_slug(client)
-    uid = f"client-{slug}-fleet"
+    slug = _customer_slug(customer)
+    uid = f"customer-{slug}-fleet"
+    _, api_base, _ = _service_urls()
+    meta = f'monitor_node_info{{customer="{customer}",environment=~"$environment"}}'
     pds = {"type": "prometheus", "uid": prom_uid}
     inf = {"type": "yesoreyeram-infinity-datasource", "uid": inf_uid}
-    sel = 'job="integrations/unix",host=~"$host"'
-    bsel = 'job="blackbox",host=~"$host"'
-    node_up_expr = f'max by (host) (up{{{sel}}})'
-    port_down_expr = f'max by (host) ((label_replace(probe_success{{{bsel}}}, "port", "$1", "port", "(?:integrations/blackbox/)?(.+)") * on(host,port) group_left() monitor_port_info) == bool 0)'
-    disk_filter = f'{sel},fstype!~"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs",mountpoint!~"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)"'
-    network_filter = f'{sel},device!~"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*"'
+    base = 'job="integrations/unix"'
+    bbase = 'job="blackbox"'
+    node_up_expr = (
+        f'(max by (host) (up{{{base}}}) * on(host) group_left() {meta} '
+        f'or on(host) (0 * {meta}))'
+    )
+    port_down_expr = (
+        f'max by (host) ((label_replace(probe_success{{{bbase}}}, "port", "$1", "port", '
+        f'"(?:integrations/blackbox/)?(.+)") * on(host,port) group_left() monitor_port_info '
+        f'* on(host) group_left() {meta}) == bool 0)'
+    )
+    disk_fs = 'fstype!~"tmpfs|devtmpfs|overlay|squashfs|aufs|nsfs|proc|sysfs|devpts|cgroup2?|pstore|securityfs|tracefs|debugfs|fusectl|mqueue|hugetlbfs|configfs|ramfs",mountpoint!~"/run($|/.*)|/var/lib/docker($|/.*)|/var/lib/containerd($|/.*)|/snap($|/.*)"'
+    disk_filter = f'{base},{disk_fs}'
+    network_filter = f'{base},device!~"lo|docker.*|veth.*|br-.*|flannel.*|cali.*|tun.*|tap.*"'
     process_regex = "alloy|grafana|prometheus|sshd|nginx|gunicorn|celery|redis-server|mongod|docker|dockerd|containerd|caddy|postgres|postgresql|mysql|mysqld"
     process_down_expr = (
-        f'count by (host) ((count_over_time(namedprocess_namegroup_num_procs{{{sel},groupname=~"{process_regex}"}}[1h]) > 0) '
-        f'unless on(host,groupname) (namedprocess_namegroup_num_procs{{{sel},groupname=~"{process_regex}"}} > 0))'
+        f'count by (host) ((count_over_time(namedprocess_namegroup_num_procs{{{base},groupname=~"{process_regex}"}}[1h]) > 0) '
+        f'unless on(host,groupname) (namedprocess_namegroup_num_procs{{{base},groupname=~"{process_regex}"}} > 0)) '
+        f'* on(host) group_left() {meta}'
     )
-    cpu_expr = f'100 - (avg by (host) (rate(node_cpu_seconds_total{{mode="idle",{sel}}}[5m])) * 100)'
-    mem_expr = f'1 - (max by (host) (node_memory_MemAvailable_bytes{{{sel}}}) / max by (host) (node_memory_MemTotal_bytes{{{sel}}}))'
-    mem_expr = f'({mem_expr}) * 100'
-    disk_expr = f'max by (host) (100 - ((node_filesystem_avail_bytes{{{disk_filter}}} / node_filesystem_size_bytes{{{disk_filter}}}) * 100))'
+    cpu_expr = f'(100 - (avg by (host) (rate(node_cpu_seconds_total{{mode="idle",{base}}}[5m])) * 100)) * on(host) group_left() {meta}'
+    mem_expr = f'((1 - (max by (host) (node_memory_MemAvailable_bytes{{{base}}}) / max by (host) (node_memory_MemTotal_bytes{{{base}}}))) * 100) * on(host) group_left() {meta}'
+    disk_expr = f'(max by (host) (100 - ((node_filesystem_avail_bytes{{{disk_filter}}} / node_filesystem_size_bytes{{{disk_filter}}}) * 100))) * on(host) group_left() {meta}'
     network_expr = (
-        f'max by (host) (rate(node_network_receive_errs_total{{{network_filter}}}[5m]) '
+        f'(max by (host) (rate(node_network_receive_errs_total{{{network_filter}}}[5m]) '
         f'+ rate(node_network_transmit_errs_total{{{network_filter}}}[5m]) '
         f'+ rate(node_network_receive_drop_total{{{network_filter}}}[5m]) '
-        f'+ rate(node_network_transmit_drop_total{{{network_filter}}}[5m]))'
+        f'+ rate(node_network_transmit_drop_total{{{network_filter}}}[5m]))) * on(host) group_left() {meta}'
     )
     critical_expr = f'(({port_down_expr} > bool 0) or (({process_down_expr}) > bool 0) or (({cpu_expr}) >= bool 90) or (({mem_expr}) >= bool 90) or (({disk_expr}) >= bool 90) or (({network_expr}) >= bool 10))'
     warning_expr = f'((({cpu_expr}) >= bool 70) or (({mem_expr}) >= bool 70) or (({disk_expr}) >= bool 70) or (({network_expr}) >= bool 1))'
@@ -336,34 +518,27 @@ def _build_client_fleet_dashboard(client, prom_uid, inf_uid):
         "dashboard": {
             "uid": uid,
             "title": "Fleet Overview - All Servers",
-            "tags": ["fleet", "overview", "client", slug],
+            "tags": ["fleet", "overview", "customer", slug],
             "refresh": "30s",
             "time": {"from": "now-5m", "to": "now"},
             "templating": {"list": [
-                {"name": "client", "type": "constant", "query": client,
-                 "current": {"text": client, "value": client}, "hide": 2},
-                {"name": "account", "type": "query", "label": "Account", "datasource": inf,
+                {"name": "customer", "type": "constant", "query": customer,
+                 "current": {"text": customer, "value": customer}, "hide": 2},
+                {"name": "environment", "type": "query", "label": "Environment", "datasource": inf,
                  "includeAll": True, "allValue": ".*",
                  "current": {"text": "All", "value": "$__all"},
                  "query": {"infinityQuery": {"refId": "variable", "source": "url", "type": "json",
-                   "url": f"http://localhost:9099/client-accounts?client={client}"},
-                   "queryType": "infinity", "type": "infinity"},
-                 "refresh": 1, "sort": 0},
-                {"name": "host", "type": "query", "label": "Server", "datasource": inf,
-                 "includeAll": True,
-                 "current": {"text": "All", "value": "$__all"},
-                 "query": {"infinityQuery": {"refId": "variable", "source": "url", "type": "json",
-                   "url": f"http://localhost:9099/client-hosts?client={client}&account=${{account}}"},
+                   "url": f"{api_base}/customer-environments?customer={customer}"},
                    "queryType": "infinity", "type": "infinity"},
                  "refresh": 1, "sort": 0},
             ]},
             "panels": [
-                stat(1, 0, "Total Servers", "blue", f'count(max by (host) (up{{{sel}}})) or on() vector(0)'),
+                stat(1, 0, "Total Servers", "blue", f'count(max by (host) (up{{{base}}}) * on(host) group_left() {meta}) or on() vector(0)'),
                 stat(2, 4, "Up", "green", f'count(({server_status_expr}) == 1) or on() vector(0)'),
                 stat(3, 8, "Down", "red", f'count(({server_status_expr}) == 0) or on() vector(0)'),
                 stat(4, 12, "Critical Servers", "red", f'count(({server_status_expr}) == 3) or on() vector(0)'),
                 stat(5, 16, "Warning Servers", "orange", f'count(({server_status_expr}) == 2) or on() vector(0)'),
-                stat(6, 20, "Ports Up", "green", f'count((label_replace(probe_success{{{bsel}}}, "port", "$1", "port", "(?:integrations/blackbox/)?(.+)") * on(host,port) group_left() monitor_port_info) == 1) or on() vector(0)'),
+                stat(6, 20, "Ports Up", "green", f'count((label_replace(probe_success{{{bbase}}}, "port", "$1", "port", "(?:integrations/blackbox/)?(.+)") * on(host,port) group_left() monitor_port_info * on(host) group_left() {meta}) == 1) or on() vector(0)'),
                 {"datasource": pds, "description": "Your servers with live health status. Click a host to drill down.",
                  "fieldConfig": {"defaults": {"custom": {"align": "left", "filterable": True}}, "overrides": [
                      {"matcher": {"id": "byName", "options": "Status"}, "properties": [{"id": "mappings", "value": [{"options": {"0": {"color": "red", "index": 0, "text": "\ud83d\udd34 DOWN"}, "1": {"color": "green", "index": 1, "text": "\ud83d\udfe2 UP"}, "2": {"color": "orange", "index": 2, "text": "\ud83d\udfe0 WARNING"}, "3": {"color": "red", "index": 3, "text": "\ud83d\udd34 CRITICAL"}}, "type": "value"}]}, {"id": "custom.cellOptions", "value": {"type": "color-text"}}, {"id": "custom.width", "value": 120}]},
@@ -372,19 +547,19 @@ def _build_client_fleet_dashboard(client, prom_uid, inf_uid):
                      {"matcher": {"id": "byName", "options": "Disk %"}, "properties": [{"id": "unit", "value": "percent"}, {"id": "decimals", "value": 1}, {"id": "custom.cellOptions", "value": {"mode": "gradient", "type": "gauge"}}, {"id": "max", "value": 100}, {"id": "min", "value": 0}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": None}, {"color": "yellow", "value": 70}, {"color": "red", "value": 90}]}}]},
                      {"matcher": {"id": "byName", "options": "Load"}, "properties": [{"id": "decimals", "value": 2}]},
                      {"matcher": {"id": "byName", "options": "Uptime"}, "properties": [{"id": "unit", "value": "s"}]},
-                     {"matcher": {"id": "byName", "options": "Host"}, "properties": [{"id": "links", "value": [{"title": "Drill down to $__value.raw", "url": f"/d/client-{slug}-summary/my-servers?var-host=${{__value.raw}}"}]}]}
+                     {"matcher": {"id": "byName", "options": "Host"}, "properties": [{"id": "links", "value": [{"title": "Drill down to $__value.raw", "url": f"/d/customer-{slug}-dd-summary/server-drill-down-alloy?var-host=${{__value.raw}}"}]}]}
                  ]},
                  "gridPos": {"h": 18, "w": 24, "x": 0, "y": 4}, "id": 10,
                  "options": {"cellHeight": "md", "footer": {"show": False}, "showHeader": True, "sortBy": [{"desc": False, "displayName": "Status"}]},
                  "targets": [
                      {"expr": server_status_expr, "format": "table", "instant": True, "refId": "Status"},
-                     {"expr": f'100 - (avg by (host) (rate(node_cpu_seconds_total{{mode="idle",{sel}}}[5m])) * 100)', "format": "table", "instant": True, "refId": "CPU"},
-                     {"expr": f'(1 - (max by (host) (node_memory_MemAvailable_bytes{{{sel}}}) / max by (host) (node_memory_MemTotal_bytes{{{sel}}}))) * 100', "format": "table", "instant": True, "refId": "Memory"},
-                     {"expr": f'max by (host) (100 - ((node_filesystem_avail_bytes{{{disk_filter}}} / node_filesystem_size_bytes{{{disk_filter}}}) * 100))', "format": "table", "instant": True, "refId": "Disk"},
-                     {"expr": f'sum by (host) (node_filesystem_size_bytes{{{disk_filter}}} - node_filesystem_avail_bytes{{{disk_filter}}}) / 1024 / 1024 / 1024', "format": "table", "instant": True, "refId": "DiskUsed"},
-                     {"expr": f'sum by (host) (node_filesystem_size_bytes{{{disk_filter}}}) / 1024 / 1024 / 1024', "format": "table", "instant": True, "refId": "DiskTotal"},
-                     {"expr": f'max by (host) (node_load1{{{sel}}})', "format": "table", "instant": True, "refId": "Load"},
-                     {"expr": f'time() - max by (host) (node_boot_time_seconds{{{sel}}})', "format": "table", "instant": True, "refId": "Uptime"}
+                     {"expr": f'100 - (avg by (host) (rate(node_cpu_seconds_total{{mode="idle",{base}}}[5m])) * 100) * on(host) group_left() {meta}', "format": "table", "instant": True, "refId": "CPU"},
+                     {"expr": f'((1 - (max by (host) (node_memory_MemAvailable_bytes{{{base}}}) / max by (host) (node_memory_MemTotal_bytes{{{base}}}))) * 100) * on(host) group_left() {meta}', "format": "table", "instant": True, "refId": "Memory"},
+                     {"expr": f'max by (host) (100 - ((node_filesystem_avail_bytes{{{disk_filter}}} / node_filesystem_size_bytes{{{disk_filter}}}) * 100)) * on(host) group_left() {meta}', "format": "table", "instant": True, "refId": "Disk"},
+                     {"expr": f'sum by (host) (node_filesystem_size_bytes{{{disk_filter}}} - node_filesystem_avail_bytes{{{disk_filter}}}) / 1024 / 1024 / 1024 * on(host) group_left() {meta}', "format": "table", "instant": True, "refId": "DiskUsed"},
+                     {"expr": f'sum by (host) (node_filesystem_size_bytes{{{disk_filter}}}) / 1024 / 1024 / 1024 * on(host) group_left() {meta}', "format": "table", "instant": True, "refId": "DiskTotal"},
+                     {"expr": f'max by (host) (node_load1{{{base}}}) * on(host) group_left() {meta}', "format": "table", "instant": True, "refId": "Load"},
+                     {"expr": f'(time() - max by (host) (node_boot_time_seconds{{{base}}})) * on(host) group_left() {meta}', "format": "table", "instant": True, "refId": "Uptime"}
                  ],
                  "title": "Server Status",
                  "transformations": [
@@ -397,37 +572,48 @@ def _build_client_fleet_dashboard(client, prom_uid, inf_uid):
     }
 
 
-def _build_client_dashboard(client, prom_uid, inf_uid):
-    """Build client-scoped 'My Servers' dashboard JSON.
+_build_client_fleet_dashboard = _build_customer_fleet_dashboard
+
+
+def _build_customer_dashboard(customer, prom_uid, inf_uid):
+    """Build customer-scoped 'My Servers' dashboard JSON.
 
     Scoped by host membership from the central API (the `host` variable is
-    populated from /client-hosts?client=<client>), so it does not depend on the
-    metric `client` label and works the moment a server is assigned in the UI.
+    populated from /customer-hosts?customer=<customer>), so it does not depend on the
+    metric `customer` label and works the moment a server is assigned in the UI.
     """
-    uid = f"client-{client.lower().replace(' ', '-')}-summary"
+    uid = f"customer-{customer.lower().replace(' ', '-')}-summary"
+    _, api_base, _ = _service_urls()
+    default_host, default_label = _customer_default_host(customer)
+    host_current = (
+        {"text": default_label, "value": default_host}
+        if default_host
+        else {"text": "", "value": ""}
+    )
     return {
         "dashboard": {
             "uid": uid,
             "title": "My Servers",
-            "tags": ["client", client.lower()],
+            "tags": ["customer", customer.lower()],
             "refresh": "30s",
             "time": {"from": "now-6h", "to": "now"},
             "templating": {"list": [
-                {"name": "client", "type": "constant", "query": client,
-                 "current": {"text": client, "value": client}, "hide": 2},
-                {"name": "account", "type": "query", "label": "Account",
+                {"name": "customer", "type": "constant", "query": customer,
+                 "current": {"text": customer, "value": customer}, "hide": 2},
+                {"name": "environment", "type": "query", "label": "Environment",
                  "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": inf_uid},
                  "includeAll": True, "allValue": ".*",
                  "current": {"text": "All", "value": "$__all"},
                  "query": {"infinityQuery": {"refId": "variable", "source": "url", "type": "json",
-                   "url": f"http://localhost:9099/client-accounts?client={client}"},
+                   "url": f"{api_base}/customer-environments?customer={customer}"},
                    "queryType": "infinity", "type": "infinity"},
                  "refresh": 1, "sort": 0},
                 {"name": "host", "type": "query", "label": "Server",
                  "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": inf_uid},
                  "includeAll": False,
+                 "current": host_current,
                  "query": {"infinityQuery": {"refId": "variable", "source": "url", "type": "json",
-                   "url": f"http://localhost:9099/client-hosts?client={client}&account=${{account}}"},
+                   "url": f"{api_base}/customer-hosts?customer={customer}&environment=${{environment}}"},
                    "queryType": "infinity", "type": "infinity"},
                  "refresh": 1, "sort": 0},
             ]},
@@ -477,7 +663,7 @@ def _build_client_dashboard(client, prom_uid, inf_uid):
                  "fieldConfig":{"defaults":{"custom":{"align":"left"},"mappings":[{"options":{"0":{"color":"red","text":"DOWN"},"1":{"color":"green","text":"UP"}},"type":"value"}]}},
                  "options":{"cellHeight":"sm","showHeader":True},
                  "targets":[{"expr":'label_replace(probe_success{host="$host",job="blackbox"}, "port", "$1", "port", "(?:integrations/blackbox/)?(.+)") * on(host,port) group_left() monitor_port_info',"format":"table","instant":True,"refId":"A"}],
-                 "transformations":[{"id":"organize","options":{"excludeByName":{"Time":True,"__name__":True,"account":True,"client":True,"host":True,"instance":True,"job":True},"renameByName":{"Value":"Status","port":"Port"}}}]},
+                 "transformations":[{"id":"organize","options":{"excludeByName":{"Time":True,"__name__":True,"customer":True,"environment":True,"host":True,"instance":True,"job":True},"renameByName":{"Value":"Status","port":"Port"}}}]},
                 {"type":"table","id":14,"title":"Top Processes","gridPos":{"h":8,"w":12,"x":12,"y":12},
                  "datasource":{"type":"prometheus","uid":prom_uid},
                  "fieldConfig":{"defaults":{"custom":{"align":"left"}},"overrides":[{"matcher":{"id":"byName","options":"CPU %"},"properties":[{"id":"unit","value":"percent"},{"id":"decimals","value":2}]},{"matcher":{"id":"byName","options":"Memory"},"properties":[{"id":"unit","value":"decbytes"}]}]},
@@ -497,6 +683,67 @@ def _build_client_dashboard(client, prom_uid, inf_uid):
     }
 
 
+_build_client_dashboard = _build_customer_dashboard
+
+
+def sync_customer_org_dashboards(customer, org_id):
+    """Repair datasources and deploy the customer portal dashboard set only."""
+    prom_url, api_url, _ = _service_urls()
+    inf_body = _infinity_datasource_body(api_url)
+    prom_uid, prom_msg = _grafana_upsert_datasource(org_id, "Prometheus", "prometheus", prom_url, True)
+    inf_uid, inf_msg = _grafana_upsert_datasource(
+        org_id, inf_body["name"], inf_body["type"], inf_body["url"], False, inf_body["jsonData"]
+    )
+    results = []
+    dashboards = [
+        _build_customer_fleet_dashboard(customer, prom_uid, inf_uid),
+        *_build_customer_drilldowns(customer, prom_uid, inf_uid),
+    ]
+    for payload in dashboards:
+        ok, msg = _grafana_deploy_dashboard(org_id, payload)
+        dash = payload.get("dashboard", {})
+        results.append({
+            "title": dash.get("title", ""),
+            "uid": dash.get("uid", ""),
+            "ok": ok,
+            "message": msg,
+        })
+    removed = _prune_customer_org_dashboards(customer, org_id)
+    return {
+        "prom_uid": prom_uid,
+        "inf_uid": inf_uid,
+        "datasources": {"prometheus": prom_msg, "infinity": inf_msg},
+        "dashboards": results,
+        "removed": removed,
+        "ok": all(r.get("ok") for r in results),
+    }
+
+
+def sync_all_customer_orgs():
+    """Redeploy dashboards + fix datasources for every customer org."""
+    orgs = _grafana_list_orgs()
+    out = []
+    for o in orgs:
+        if o.get("id") == 1:
+            continue
+        name = o.get("name", "")
+        if name.startswith("Customer - "):
+            customer = name.replace("Customer - ", "", 1)
+        elif name.startswith("Client - "):
+            customer = name.replace("Client - ", "", 1)
+        else:
+            customer = name
+        detail = sync_customer_org_dashboards(customer, o["id"])
+        out.append({"customer": customer, "org_id": o["id"], **detail})
+    _grafana_switch_org(1)
+    return out
+
+
+_prune_client_org_dashboards = _prune_customer_org_dashboards
+sync_client_org_dashboards = sync_customer_org_dashboards
+sync_all_client_orgs = sync_all_customer_orgs
+
+
 # ---- main-org dashboard / alert-rule sync ----------------------------------
 
 def _datasource_uid_by_name(name, fallback=""):
@@ -514,6 +761,15 @@ def _ensure_monitoring_folder():
     return status in (200, 201, 412), data.get("message", str(data))
 
 
+def _strip_dashboard_runtime_fields(dash):
+    """Remove export-only fields that break Grafana POST /api/dashboards/db."""
+    if not isinstance(dash, dict):
+        return dash
+    dash.pop("id", None)
+    dash.pop("version", None)
+    return dash
+
+
 def sync_main_dashboards():
     """Deploy every dashboard JSON bundled with the API package.
 
@@ -525,6 +781,7 @@ def sync_main_dashboards():
     prom_uid = _datasource_uid_by_name("Prometheus", "PBFA97CFB590B2093")
     inf_uid = _datasource_uid_by_name("Port Monitor API", "cfmmi8ef0wxz4a")
     public_url = (cfg.get("public_url") or "http://localhost:9099").rstrip("/")
+    _, api_base, _ = _service_urls()
     _grafana_switch_org(1)
     _ensure_monitoring_folder()
     results = []
@@ -534,19 +791,27 @@ def sync_main_dashboards():
         path = _os.path.join(_DASHBOARDS_DIR, fname)
         with open(path, encoding="utf-8") as f:
             raw = f.read()
+        raw = _rewrite_dashboard_sources(raw, prom_uid, inf_uid, api_base)
         raw = (
             raw.replace("__PROM_DS_UID__", prom_uid)
             .replace("__INFINITY_DS_UID__", inf_uid)
             .replace("__MONITOR_API_PUBLIC_URL__", public_url)
         )
         payload = json.loads(raw)
-        payload.setdefault("folderUid", "monitoring")
-        payload["overwrite"] = True
-        ok, msg = _grafana_deploy_dashboard(1, payload)
+        if isinstance(payload.get("dashboard"), dict):
+            dash = payload["dashboard"]
+            api_payload = payload
+        else:
+            dash = payload
+            api_payload = {"dashboard": dash}
+        dash = _strip_dashboard_runtime_fields(api_payload.setdefault("dashboard", dash))
+        api_payload.setdefault("folderUid", "monitoring")
+        api_payload["overwrite"] = True
+        ok, msg = _grafana_deploy_dashboard(1, api_payload)
         results.append({
             "file": fname,
-            "uid": payload.get("dashboard", {}).get("uid", ""),
-            "title": payload.get("dashboard", {}).get("title", ""),
+            "uid": dash.get("uid", ""),
+            "title": dash.get("title", ""),
             "ok": ok,
             "message": msg,
         })
@@ -663,15 +928,15 @@ def _builtin_alert_rules():
         return bool(cfg(rule_id).get("enabled", True))
 
     host_context = (
-        "Server:  {{ $labels.name }}\n"
-        "Host:    {{ $labels.host }}\n"
-        "IP:      {{ $labels.ip }}\n"
-        "Customer: {{ $labels.client }}\n"
-        "Account: {{ $labels.account }}"
+        "Server:     {{ $labels.name }}\n"
+        "Host:       {{ $labels.host }}\n"
+        "IP:         {{ $labels.ip }}\n"
+        "Customer:   {{ $labels.customer }}\n"
+        "Environment: {{ $labels.environment }}"
     )
     node_status = (
         '(max by (host)(up{job="integrations/unix"}) or on(host) (0 * monitor_node_info)) '
-        '* on(host) group_left(ip,name,client,account) monitor_node_info'
+        '* on(host) group_left(ip,name,customer,environment) monitor_node_info'
     )
     cpu_base = '(100 - (avg by (host)(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100))'
     mem_base = '(max by (host)((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100))'
@@ -703,7 +968,7 @@ def _builtin_alert_rules():
         ),
         _alert_rule(
             "afohj8eu0nklcb", "Port Down", "availability",
-            'max by (host,port)(label_replace(probe_success{job="blackbox"}, "port", "$1", "port", "(?:integrations/blackbox/)?(.+)")) * on(host,port) group_left() monitor_port_info * on(host) group_left(ip,name,client,account) monitor_node_info',
+            'max by (host,port)(label_replace(probe_success{job="blackbox"}, "port", "$1", "port", "(?:integrations/blackbox/)?(.+)")) * on(host,port) group_left() monitor_port_info * on(host) group_left(ip,name,customer,environment) monitor_node_info',
             "lt", 1, dur("port_down", 2), sev("port_down", "critical"),
             "Port {{ $labels.port }} DOWN on {{ $labels.name }} ({{ $labels.host }})",
             host_context + "\nPort:    {{ $labels.port }}\n\nThe port probe is failing (probe_success=0).",
@@ -711,7 +976,7 @@ def _builtin_alert_rules():
         ),
         _alert_rule(
             "process-down-critical", "Process Down", "availability",
-            f'({process_down_base}) * on(host) group_left(ip,name,client,account) monitor_node_info',
+            f'({process_down_base}) * on(host) group_left(ip,name,customer,environment) monitor_node_info',
             "gt", 0, dur("process_down", 2), sev("process_down", "critical"),
             "Process {{ $labels.groupname }} DOWN on {{ $labels.name }} ({{ $labels.host }})",
             host_context + "\nProcess: {{ $labels.groupname }}\n\nThe process was present in the last hour but is no longer running.",
@@ -729,12 +994,12 @@ def _builtin_alert_rules():
         ),
         _alert_rule(
             "uptime-kuma-monitor-down", "Site Monitor Down", "uptime-kuma",
-            'min by (monitor_name) (monitor_status{job="uptime-kuma"}) * on(monitor_name) group_left(site,name,client,account) monitor_kuma_site_info',
+            'min by (monitor_name) (monitor_status{job="uptime-kuma"}) * on(monitor_name) group_left(site,name,customer,environment) monitor_kuma_site_info',
             "lt", 1, dur("uptime_kuma_monitor_down", 2), sev("uptime_kuma_monitor_down", "critical"),
             "Site monitor {{ $labels.name }} is DOWN",
             "Monitor: {{ $labels.name }}\n"
-            "Customer: {{ $labels.client }}\n"
-            "Account: {{ $labels.account }}\n\n"
+            "Customer: {{ $labels.customer }}\n"
+            "Environment: {{ $labels.environment }}\n\n"
             "The site monitor is reporting DOWN.",
             is_paused=not enabled("uptime_kuma_monitor_down"),
         ),
@@ -743,7 +1008,7 @@ def _builtin_alert_rules():
     cpu_critical = threshold("high_cpu", "critical_threshold", 90)
     rules.append(_alert_rule(
             "ffohj93hcl2iof", "High CPU Usage Warning", "resources",
-            f'(({cpu_base} > bool {cpu_warning:g}) * ({cpu_base} < bool {cpu_critical:g}) * {cpu_base}) * on(host) group_left(ip,name,client,account) monitor_node_info',
+            f'(({cpu_base} > bool {cpu_warning:g}) * ({cpu_base} < bool {cpu_critical:g}) * {cpu_base}) * on(host) group_left(ip,name,customer,environment) monitor_node_info',
             "gt", cpu_warning, dur("high_cpu", 5), "warning",
             "High CPU warning on {{ $labels.name }} ({{ $labels.host }})",
             host_context + f"\n\nCPU usage is between {cpu_warning:g}% and {cpu_critical:g}% for {cfg('high_cpu').get('duration_minutes', 5)} minutes (current: {{{{ $values.B }}}}%).",
@@ -751,7 +1016,7 @@ def _builtin_alert_rules():
         ))
     rules.append(_alert_rule(
             "high-cpu-critical", "High CPU Usage Critical", "resources",
-            f'({cpu_base}) * on(host) group_left(ip,name,client,account) monitor_node_info',
+            f'({cpu_base}) * on(host) group_left(ip,name,customer,environment) monitor_node_info',
             "gt", cpu_critical, dur("high_cpu", 5), "critical",
             "High CPU critical on {{ $labels.name }} ({{ $labels.host }})",
             host_context + f"\n\nCPU usage has been above {cpu_critical:g}% for {cfg('high_cpu').get('duration_minutes', 5)} minutes (current: {{{{ $values.B }}}}%).",
@@ -761,7 +1026,7 @@ def _builtin_alert_rules():
     mem_critical = threshold("high_memory", "critical_threshold", 90)
     rules.append(_alert_rule(
             "bfohj9rdcmk8wf", "High Memory Usage Warning", "resources",
-            f'(({mem_base} > bool {mem_warning:g}) * ({mem_base} < bool {mem_critical:g}) * {mem_base}) * on(host) group_left(ip,name,client,account) monitor_node_info',
+            f'(({mem_base} > bool {mem_warning:g}) * ({mem_base} < bool {mem_critical:g}) * {mem_base}) * on(host) group_left(ip,name,customer,environment) monitor_node_info',
             "gt", mem_warning, dur("high_memory", 5), "warning",
             "High memory warning on {{ $labels.name }} ({{ $labels.host }})",
             host_context + f"\n\nMemory usage is between {mem_warning:g}% and {mem_critical:g}% for {cfg('high_memory').get('duration_minutes', 5)} minutes (current: {{{{ $values.B }}}}%).",
@@ -769,7 +1034,7 @@ def _builtin_alert_rules():
         ))
     rules.append(_alert_rule(
             "high-memory-critical", "High Memory Usage Critical", "resources",
-            f'({mem_base}) * on(host) group_left(ip,name,client,account) monitor_node_info',
+            f'({mem_base}) * on(host) group_left(ip,name,customer,environment) monitor_node_info',
             "gt", mem_critical, dur("high_memory", 5), "critical",
             "High memory critical on {{ $labels.name }} ({{ $labels.host }})",
             host_context + f"\n\nMemory usage has been above {mem_critical:g}% for {cfg('high_memory').get('duration_minutes', 5)} minutes (current: {{{{ $values.B }}}}%).",
@@ -779,7 +1044,7 @@ def _builtin_alert_rules():
     disk_critical = threshold("low_disk", "critical_threshold", 90)
     rules.append(_alert_rule(
             "efohjag79sf0ga", "Low Disk Space Warning", "resources",
-            f'(({disk_base} > bool {disk_warning:g}) * ({disk_base} < bool {disk_critical:g}) * {disk_base}) * on(host) group_left(ip,name,client,account) monitor_node_info',
+            f'(({disk_base} > bool {disk_warning:g}) * ({disk_base} < bool {disk_critical:g}) * {disk_base}) * on(host) group_left(ip,name,customer,environment) monitor_node_info',
             "gt", disk_warning, dur("low_disk", 5), "warning",
             "Low disk warning on {{ $labels.name }} ({{ $labels.host }})",
             host_context + f"\nFilesystem: {{{{ $labels.mountpoint }}}}\n\nDisk usage on this filesystem is between {disk_warning:g}% and {disk_critical:g}% for {cfg('low_disk').get('duration_minutes', 5)} minutes (current: {{{{ $values.B }}}}%).",
@@ -787,7 +1052,7 @@ def _builtin_alert_rules():
         ))
     rules.append(_alert_rule(
             "low-disk-critical", "Low Disk Space Critical", "resources",
-            f'({disk_base}) * on(host) group_left(ip,name,client,account) monitor_node_info',
+            f'({disk_base}) * on(host) group_left(ip,name,customer,environment) monitor_node_info',
             "gt", disk_critical, dur("low_disk", 5), "critical",
             "Low disk critical on {{ $labels.name }} ({{ $labels.host }})",
             host_context + f"\nFilesystem: {{{{ $labels.mountpoint }}}}\n\nDisk usage on this filesystem has been above {disk_critical:g}% for {cfg('low_disk').get('duration_minutes', 5)} minutes (current: {{{{ $values.B }}}}%).",
@@ -797,7 +1062,7 @@ def _builtin_alert_rules():
     network_critical = threshold("network_errors", "critical_threshold", 10)
     rules.append(_alert_rule(
             "network-errors-warning", "Network Errors Warning", "resources",
-            f'(({network_base} > bool {network_warning:g}) * ({network_base} < bool {network_critical:g}) * {network_base}) * on(host) group_left(ip,name,client,account) monitor_node_info',
+            f'(({network_base} > bool {network_warning:g}) * ({network_base} < bool {network_critical:g}) * {network_base}) * on(host) group_left(ip,name,customer,environment) monitor_node_info',
             "gt", network_warning, dur("network_errors", 5), "warning",
             "Network errors warning on {{ $labels.name }} ({{ $labels.host }})",
             host_context + f"\nDevice: {{{{ $labels.device }}}}\n\nNetwork errors/drops are between {network_warning:g}/s and {network_critical:g}/s for {cfg('network_errors').get('duration_minutes', 5)} minutes (current: {{{{ $values.B }}}}/s).",
@@ -805,7 +1070,7 @@ def _builtin_alert_rules():
         ))
     rules.append(_alert_rule(
             "network-errors-critical", "Network Errors Critical", "resources",
-            f'({network_base}) * on(host) group_left(ip,name,client,account) monitor_node_info',
+            f'({network_base}) * on(host) group_left(ip,name,customer,environment) monitor_node_info',
             "gt", network_critical, dur("network_errors", 5), "critical",
             "Network errors critical on {{ $labels.name }} ({{ $labels.host }})",
             host_context + f"\nDevice: {{{{ $labels.device }}}}\n\nNetwork errors/drops have been above {network_critical:g}/s for {cfg('network_errors').get('duration_minutes', 5)} minutes (current: {{{{ $values.B }}}}/s).",
@@ -864,13 +1129,13 @@ def sync_alert_rules():
     return results
 
 
-# ---- alerting: per-client email contact points + notification routing -------
+# ---- alerting: per-customer email contact points + notification routing -------
 
 import re as _re
 
 _PROV_HDR = {"X-Disable-Provenance": "true"}  # keep resources editable in the UI
 
-# Reserved recipient key whose route matches every alert (all clients).
+# Reserved recipient key whose route matches every alert (all customers).
 ALL_CLIENTS_KEY = "*"
 ALL_CLIENTS_RECEIVER = "all-clients"
 ALERT_TEMPLATE_NAME = "zentra.email"
@@ -939,10 +1204,13 @@ def _email_contact_settings(addresses):
     }
 
 
-def _client_receiver_name(client):
-    if client == ALL_CLIENTS_KEY:
+def _customer_receiver_name(customer):
+    if customer == ALL_CLIENTS_KEY:
         return ALL_CLIENTS_RECEIVER
-    return f"client-{_client_slug(client)}"
+    return f"customer-{_customer_slug(customer)}"
+
+
+_client_receiver_name = _customer_receiver_name
 
 
 def _group_receiver_name(group_id):
@@ -1003,25 +1271,25 @@ def rebuild_notification_policy(active, host_map, admin_receiver, group_routes=N
     """Rebuild the notification policy tree.
 
     - admin_receiver always receives every alert (match-all child, continue=true)
-    - `active` is {client: [enabled_emails]} (client/all-clients recipients)
-    - `site_map` is {client: [Uptime Kuma monitor_name]} for site alerts
+    - `active` is {customer: [enabled_emails]} (customer/all-customers recipients)
+    - `site_map` is {customer: [Uptime Kuma monitor_name]} for site alerts
     - `group_routes` is an optional list of {"receiver": name, "hosts": [...]}
       for alert groups spanning arbitrary servers.
     Every route uses continue=true, so a host belonging to several scopes
-    (its client + one or more groups) notifies all of them.
+    (its customer + one or more groups) notifies all of them.
     Returns (ok, message).
     """
     routes = [
         {"receiver": admin_receiver, "object_matchers": [], "continue": True},
     ]
     site_map = site_map or {}
-    for client, emails in sorted(active.items()):
+    for customer, emails in sorted(active.items()):
         if not emails:
             continue
-        if client == ALL_CLIENTS_KEY:
+        if customer == ALL_CLIENTS_KEY:
             matchers = []  # match every alert
             routes.append({
-                "receiver": _client_receiver_name(client),
+                "receiver": _customer_receiver_name(customer),
                 "object_matchers": matchers,
                 "continue": True,
                 "group_wait": "30s",
@@ -1029,20 +1297,20 @@ def rebuild_notification_policy(active, host_map, admin_receiver, group_routes=N
                 "repeat_interval": "4h",
             })
             continue
-        hosts = host_map.get(client, [])
+        hosts = host_map.get(customer, [])
         if hosts:
             routes.append({
-                "receiver": _client_receiver_name(client),
+                "receiver": _customer_receiver_name(customer),
                 "object_matchers": [["host", "=~", _host_regex(hosts)]],
                 "continue": True,
                 "group_wait": "30s",
                 "group_interval": "5m",
                 "repeat_interval": "4h",
             })
-        sites = site_map.get(client, [])
+        sites = site_map.get(customer, [])
         if sites:
             routes.append({
-                "receiver": _client_receiver_name(client),
+                "receiver": _customer_receiver_name(customer),
                 "object_matchers": [["monitor_name", "=~", _host_regex(sites)]],
                 "continue": True,
                 "group_wait": "30s",

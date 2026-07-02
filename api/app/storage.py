@@ -14,8 +14,8 @@ import re
 
 from .config import (
     DATA_DIR,
-    DEFAULT_ACCOUNT,
-    DEFAULT_CLIENT,
+    DEFAULT_CUSTOMER,
+    DEFAULT_ENVIRONMENT,
     NODES_FILE,
     PROMETHEUS_URL,
     TAXONOMY_FILE,
@@ -115,19 +115,53 @@ def normalize_host(hostname):
     return (hostname or "").strip()
 
 
-def normalize_metadata(client="", account="", name=""):
+
+def _read_customer(d):
+    return (d.get("customer") or d.get("client") or "").strip()
+
+
+def _read_environment(d):
+    return (d.get("environment") or d.get("account") or "").strip()
+
+
+def _write_metadata_fields(d, customer, environment):
+    d["customer"] = customer
+    d["environment"] = environment
+    d.pop("client", None)
+    d.pop("account", None)
+
+
+def _migrate_legacy_fields(d):
+    changed = False
+    if "client" in d:
+        if "customer" not in d:
+            d["customer"] = d["client"]
+        d.pop("client", None)
+        changed = True
+    if "account" in d:
+        if "environment" not in d:
+            d["environment"] = d["account"]
+        d.pop("account", None)
+        changed = True
+    return changed
+
+def normalize_metadata(customer="", environment="", name="", **legacy):
     """Apply defaults so new installs always appear in Grafana dropdowns."""
-    c = (client or "").strip() or DEFAULT_CLIENT
-    a = (account or "").strip() or DEFAULT_ACCOUNT
+    if not customer and legacy.get("client"):
+        customer = legacy["client"]
+    if not environment and legacy.get("account"):
+        environment = legacy["account"]
+    c = (customer or "").strip() or DEFAULT_CUSTOMER
+    a = (environment or "").strip() or DEFAULT_ENVIRONMENT
     return c, a, (name or "").strip()
 
 
-def node_client(n):
-    return (n.get("client") or "").strip() or DEFAULT_CLIENT
+def node_customer(n):
+    return _read_customer(n) or DEFAULT_CUSTOMER
 
 
-def node_account(n):
-    return (n.get("account") or "").strip() or DEFAULT_ACCOUNT
+def node_environment(n):
+    return _read_environment(n) or DEFAULT_ENVIRONMENT
 
 
 def host_display(n):
@@ -144,13 +178,15 @@ def ensure_server(host, create=False, defaults=None):
     if not create:
         return None, nodes, False
     d = defaults or {}
-    c, a, nm = normalize_metadata(d.get("client", ""), d.get("account", ""), d.get("name", ""))
+    c, a, nm = normalize_metadata(
+        _read_customer(d), _read_environment(d), d.get("name", "")
+    )
     entry = {
         "hostname": host,
         "ip": d.get("ip", ""),
         "name": nm or host,
-        "client": c,
-        "account": a,
+        "customer": c,
+        "environment": a,
         "registered": TIMESTAMP(),
         "last_seen": TIMESTAMP(),
     }
@@ -268,8 +304,8 @@ def sync_kuma_sites():
             meta[monitor_name] = {
                 "monitor_name": monitor_name,
                 "name": monitor_name,
-                "client": c,
-                "account": a,
+                "customer": c,
+                "environment": a,
                 "registered": TIMESTAMP(),
                 "last_seen": TIMESTAMP(),
             }
@@ -280,22 +316,26 @@ def sync_kuma_sites():
     if changed:
         save_kuma_site_meta(meta)
         for item in meta.values():
-            record_taxonomy(item.get("client", ""), item.get("account", ""))
+            record_taxonomy(_read_customer(item), _read_environment(item))
     return meta, live
 
 
-def list_kuma_sites(client="", account=""):
+def list_kuma_sites(customer="", environment="", **legacy):
+    if not customer and legacy.get("client"):
+        customer = legacy["client"]
+    if not environment and legacy.get("account"):
+        environment = legacy["account"]
     meta, live = sync_kuma_sites()
     sites = []
     for monitor_name in sorted(set(meta) | set(live), key=str.lower):
         m = meta.get(monitor_name, {})
         l = live.get(monitor_name, {})
-        c, a, nm = normalize_metadata(m.get("client", ""), m.get("account", ""), m.get("name", ""))
+        c, a, nm = normalize_metadata(_read_customer(m), _read_environment(m), m.get("name", ""))
         site = {
             "monitor_name": monitor_name,
             "name": nm or monitor_name,
-            "client": c,
-            "account": a,
+            "customer": c,
+            "environment": a,
             "monitor_type": l.get("monitor_type") or m.get("monitor_type", ""),
             "monitor_url": l.get("monitor_url") or m.get("monitor_url", ""),
             "monitor_hostname": l.get("monitor_hostname") or m.get("monitor_hostname", ""),
@@ -308,7 +348,7 @@ def list_kuma_sites(client="", account=""):
             "last_seen": m.get("last_seen", ""),
         }
         sites.append(site)
-    return filter_kuma_sites(sites, client, account)
+    return filter_kuma_sites(sites, customer, environment)
 
 
 def find_kuma_site(monitor_name):
@@ -329,31 +369,34 @@ def update_kuma_site(monitor_name, data):
         "registered": TIMESTAMP(),
     })
     c, a, nm = normalize_metadata(
-        data.get("client", existing.get("client", "")),
-        data.get("account", existing.get("account", "")),
+        _read_customer(data) or _read_customer(existing),
+        _read_environment(data) or _read_environment(existing),
         data.get("name", existing.get("name", monitor_name)),
     )
     existing["name"] = nm or monitor_name
-    existing["client"] = c
-    existing["account"] = a
+    _write_metadata_fields(existing, c, a)
     existing["last_seen"] = TIMESTAMP()
     save_kuma_site_meta(meta)
     record_taxonomy(c, a)
     return find_kuma_site(monitor_name), None
 
 
-def filter_kuma_sites(sites, client="", account=""):
-    if client and client not in ("", ".*", "$__all", "All"):
-        sites = [s for s in sites if s.get("client") == client]
-    if account and account not in ("", ".*", "$__all", "All"):
-        sites = [s for s in sites if s.get("account") == account]
+def filter_kuma_sites(sites, customer="", environment="", **legacy):
+    if not customer and legacy.get("client"):
+        customer = legacy["client"]
+    if not environment and legacy.get("account"):
+        environment = legacy["account"]
+    if customer and customer not in ("", ".*", "$__all", "All"):
+        sites = [s for s in sites if _read_customer(s) == customer]
+    if environment and environment not in ("", ".*", "$__all", "All"):
+        sites = [s for s in sites if _read_environment(s) == environment]
     return sites
 
 
-def client_kuma_site_map():
+def customer_kuma_site_map():
     out = {}
     for s in list_kuma_sites():
-        c = (s.get("client") or "").strip() or DEFAULT_CLIENT
+        c = _read_customer(s) or DEFAULT_CUSTOMER
         out.setdefault(c, []).append(s["monitor_name"])
     return out
 
@@ -378,8 +421,8 @@ def sync_prom_hosts():
             "hostname": h,
             "ip": "",
             "name": h,
-            "client": c,
-            "account": a,
+            "customer": c,
+            "environment": a,
             "registered": TIMESTAMP(),
             "last_seen": TIMESTAMP(),
         })
@@ -390,13 +433,26 @@ def sync_prom_hosts():
     return nodes
 
 
-# ---- taxonomy (clients & accounts) ------------------------------------------
+# ---- taxonomy (customers & environments) ------------------------------------
 
 def load_taxonomy():
-    default = {"clients": [DEFAULT_CLIENT], "accounts": {DEFAULT_CLIENT: [DEFAULT_ACCOUNT]}}
+    default = {"customers": [DEFAULT_CUSTOMER], "environments": {DEFAULT_CUSTOMER: [DEFAULT_ENVIRONMENT]}}
     tax = _read_json(TAXONOMY_FILE, default)
-    tax.setdefault("clients", default["clients"])
-    tax.setdefault("accounts", default["accounts"])
+    changed = False
+    if "clients" in tax:
+        if "customers" not in tax:
+            tax["customers"] = tax["clients"]
+        del tax["clients"]
+        changed = True
+    if "accounts" in tax:
+        if "environments" not in tax:
+            tax["environments"] = tax["accounts"]
+        del tax["accounts"]
+        changed = True
+    tax.setdefault("customers", default["customers"])
+    tax.setdefault("environments", default["environments"])
+    if changed:
+        save_taxonomy(tax)
     return tax
 
 
@@ -407,99 +463,105 @@ def save_taxonomy(tax):
 def sync_taxonomy_from_nodes():
     """Keep taxonomy in sync with registered servers and Uptime Kuma sites."""
     tax = load_taxonomy()
-    clients = set(tax.get("clients", []))
-    accounts = dict(tax.get("accounts", {}))
+    customers = set(tax.get("customers", []))
+    environments = dict(tax.get("environments", {}))
     for n in load_nodes():
-        c, a, _ = normalize_metadata(n.get("client", ""), n.get("account", ""), "")
-        clients.add(c)
-        accounts.setdefault(c, [])
-        if a not in accounts[c]:
-            accounts[c] = sorted(set(accounts[c]) | {a})
+        c, a, _ = normalize_metadata(_read_customer(n), _read_environment(n), "")
+        customers.add(c)
+        environments.setdefault(c, [])
+        if a not in environments[c]:
+            environments[c] = sorted(set(environments[c]) | {a})
     for s in load_kuma_site_meta().values():
-        c, a, _ = normalize_metadata(s.get("client", ""), s.get("account", ""), "")
-        clients.add(c)
-        accounts.setdefault(c, [])
-        if a not in accounts[c]:
-            accounts[c] = sorted(set(accounts[c]) | {a})
-    tax["clients"] = sorted(clients)
-    tax["accounts"] = {k: sorted(set(v)) for k, v in accounts.items()}
+        c, a, _ = normalize_metadata(_read_customer(s), _read_environment(s), "")
+        customers.add(c)
+        environments.setdefault(c, [])
+        if a not in environments[c]:
+            environments[c] = sorted(set(environments[c]) | {a})
+    tax["customers"] = sorted(customers)
+    tax["environments"] = {k: sorted(set(v)) for k, v in environments.items()}
     save_taxonomy(tax)
 
 
-def record_taxonomy(client="", account=""):
-    c, a, _ = normalize_metadata(client, account, "")
+def record_taxonomy(customer="", environment="", **legacy):
+    if not customer and legacy.get("client"):
+        customer = legacy["client"]
+    if not environment and legacy.get("account"):
+        environment = legacy["account"]
+    c, a, _ = normalize_metadata(customer, environment, "")
     tax = load_taxonomy()
-    clients = set(tax.get("clients", []))
-    clients.add(c)
-    tax["clients"] = sorted(clients)
-    accounts = tax.setdefault("accounts", {})
-    accts = set(accounts.get(c, []))
-    accts.add(a)
-    accounts[c] = sorted(accts)
+    customers = set(tax.get("customers", []))
+    customers.add(c)
+    tax["customers"] = sorted(customers)
+    environments = tax.setdefault("environments", {})
+    envs = set(environments.get(c, []))
+    envs.add(a)
+    environments[c] = sorted(envs)
     save_taxonomy(tax)
 
 
-def list_all_clients():
+def list_all_customers():
     sync_taxonomy_from_nodes()
     nodes = load_nodes()
     sites = load_kuma_site_meta()
     tax = load_taxonomy()
-    site_clients = {normalize_metadata(s.get("client", ""), "", "")[0] for s in sites.values()}
-    return sorted({node_client(n) for n in nodes} | site_clients | set(tax.get("clients", [])))
+    site_customers = {normalize_metadata(_read_customer(s), "", "")[0] for s in sites.values()}
+    return sorted({node_customer(n) for n in nodes} | site_customers | set(tax.get("customers", [])))
 
 
-def list_accounts_for_client(client=""):
+def list_environments_for_customer(customer="", **legacy):
+    if not customer and legacy.get("client"):
+        customer = legacy["client"]
     sync_taxonomy_from_nodes()
-    client = (client or "").strip()
-    if client in ("", ".*", "$__all", "All"):
+    customer = (customer or "").strip()
+    if customer in ("", ".*", "$__all", "All"):
         nodes = load_nodes()
         sites = load_kuma_site_meta()
         tax = load_taxonomy()
-        from_nodes = {node_account(n) for n in nodes}
-        from_sites = {normalize_metadata("", s.get("account", ""), "")[1] for s in sites.values()}
-        from_tax = {a for accs in tax.get("accounts", {}).values() for a in accs}
-        return sorted(from_nodes | from_sites | from_tax | {DEFAULT_ACCOUNT})
-    client = client or DEFAULT_CLIENT
+        from_nodes = {node_environment(n) for n in nodes}
+        from_sites = {normalize_metadata("", _read_environment(s), "")[1] for s in sites.values()}
+        from_tax = {a for accs in tax.get("environments", {}).values() for a in accs}
+        return sorted(from_nodes | from_sites | from_tax | {DEFAULT_ENVIRONMENT})
+    customer = customer or DEFAULT_CUSTOMER
     nodes = load_nodes()
     sites = load_kuma_site_meta()
-    from_nodes = {node_account(n) for n in nodes if node_client(n) == client}
+    from_nodes = {node_environment(n) for n in nodes if node_customer(n) == customer}
     from_sites = {
-        normalize_metadata("", s.get("account", ""), "")[1]
+        normalize_metadata("", _read_environment(s), "")[1]
         for s in sites.values()
-        if normalize_metadata(s.get("client", ""), "", "")[0] == client
+        if normalize_metadata(_read_customer(s), "", "")[0] == customer
     }
     tax = load_taxonomy()
-    from_tax = set(tax.get("accounts", {}).get(client, []))
-    return sorted(from_nodes | from_sites | from_tax | {DEFAULT_ACCOUNT})
+    from_tax = set(tax.get("environments", {}).get(customer, []))
+    return sorted(from_nodes | from_sites | from_tax | {DEFAULT_ENVIRONMENT})
 
 
 def taxonomy_overview():
     sync_taxonomy_from_nodes()
     nodes = load_nodes()
     sites = load_kuma_site_meta()
-    clients = []
-    for c in list_all_clients():
+    customers = []
+    for c in list_all_customers():
         accs = []
-        for a in list_accounts_for_client(c):
+        for a in list_environments_for_customer(c):
             accs.append({
                 "name": a,
-                "server_count": sum(1 for n in nodes if node_client(n) == c and node_account(n) == a),
+                "server_count": sum(1 for n in nodes if node_customer(n) == c and node_environment(n) == a),
                 "site_count": sum(
                     1 for s in sites.values()
-                    if normalize_metadata(s.get("client", ""), "", "")[0] == c
-                    and normalize_metadata("", s.get("account", ""), "")[1] == a
+                    if normalize_metadata(_read_customer(s), "", "")[0] == c
+                    and normalize_metadata("", _read_environment(s), "")[1] == a
                 ),
             })
-        clients.append({
+        customers.append({
             "name": c,
-            "server_count": sum(1 for n in nodes if node_client(n) == c),
+            "server_count": sum(1 for n in nodes if node_customer(n) == c),
             "site_count": sum(
                 1 for s in sites.values()
-                if normalize_metadata(s.get("client", ""), "", "")[0] == c
+                if normalize_metadata(_read_customer(s), "", "")[0] == c
             ),
-            "accounts": accs,
+            "environments": accs,
         })
-    return {"clients": clients, "total_servers": len(nodes), "total_sites": len(sites)}
+    return {"customers": customers, "total_servers": len(nodes), "total_sites": len(sites)}
 
 
 # ---- command center ---------------------------------------------------------
@@ -618,8 +680,12 @@ def _worse_status(a, b):
     return a if _severity_rank(a) >= _severity_rank(b) else b
 
 
-def command_center(client="", account=""):
+def command_center(customer="", environment="", **legacy):
     """Unified operational summary for the modern inventory dashboard."""
+    if not customer and legacy.get("client"):
+        customer = legacy["client"]
+    if not environment and legacy.get("account"):
+        environment = legacy["account"]
     settings = load_alert_settings()
     rules = settings.get("rules", {})
     cpu_rule = rules.get("high_cpu", {})
@@ -637,8 +703,8 @@ def command_center(client="", account=""):
     network_crit = float(network_rule.get("critical_threshold", 10))
     process_regex = str(process_rule.get("process_regex") or PROCESS_DOWN_DEFAULT_REGEX)
 
-    nodes = filter_nodes(sync_prom_hosts(), client, account)
-    sites = list_kuma_sites(client, account)
+    nodes = filter_nodes(sync_prom_hosts(), customer, environment)
+    sites = list_kuma_sites(customer, environment)
     up = _metric_value_map('max by (host) (up{job="integrations/unix"})')
     cpu = _metric_value_map(
         '100 - (avg by (host) (rate(node_cpu_seconds_total{job="integrations/unix",mode="idle"}[5m])) * 100)'
@@ -675,13 +741,13 @@ def command_center(client="", account=""):
         "response_time_sum": 0.0,
         "response_time_count": 0,
     }
-    clients = {}
+    customers = {}
     assets = []
 
-    def add_bucket(asset_client, asset_account, asset_type, severity):
-        c = asset_client or DEFAULT_CLIENT
-        a = asset_account or DEFAULT_ACCOUNT
-        citem = clients.setdefault(c, {
+    def add_bucket(asset_customer, asset_environment, asset_type, severity):
+        c = asset_customer or DEFAULT_CUSTOMER
+        a = asset_environment or DEFAULT_ENVIRONMENT
+        citem = customers.setdefault(c, {
             "name": c,
             "servers": 0,
             "sites": 0,
@@ -693,9 +759,9 @@ def command_center(client="", account=""):
             "critical": 0,
             "unknown": 0,
             "status": "ok",
-            "accounts": {},
+            "environments": {},
         })
-        aitem = citem["accounts"].setdefault(a, {
+        aitem = citem["environments"].setdefault(a, {
             "name": a,
             "servers": 0,
             "sites": 0,
@@ -759,13 +825,13 @@ def command_center(client="", account=""):
             totals["down"] += 1
         totals["ports_down"] += p.get("down", 0)
         totals["processes_down"] += current_process_down
-        add_bucket(node_client(n), node_account(n), "server", severity)
+        add_bucket(node_customer(n), node_environment(n), "server", severity)
         assets.append({
             "type": "server",
             "id": host,
             "name": n.get("name") or host,
-            "client": node_client(n),
-            "account": node_account(n),
+            "customer": node_customer(n),
+            "environment": node_environment(n),
             "target": n.get("ip") or host,
             "status": "up" if status == 1 else ("down" if status == 0 else "unknown"),
             "severity": severity,
@@ -804,14 +870,14 @@ def command_center(client="", account=""):
         if rt is not None:
             totals["response_time_sum"] += float(rt)
             totals["response_time_count"] += 1
-        add_bucket(s.get("client"), s.get("account"), "site", severity)
+        add_bucket(_read_customer(s), _read_environment(s), "site", severity)
         monitor_name = s.get("monitor_name")
         assets.append({
             "type": "site",
             "id": monitor_name,
             "name": s.get("name") or monitor_name,
-            "client": s.get("client") or DEFAULT_CLIENT,
-            "account": s.get("account") or DEFAULT_ACCOUNT,
+            "customer": _read_customer(s) or DEFAULT_CUSTOMER,
+            "environment": _read_environment(s) or DEFAULT_ENVIRONMENT,
             "target": s.get("target") or s.get("monitor_url") or "",
             "status": "up" if value == 1 else ("down" if value == 0 else "unknown"),
             "severity": severity,
@@ -833,79 +899,83 @@ def command_center(client="", account=""):
         round((totals["up"] / known_assets) * 100, 2) if known_assets > 0 else None
     )
 
-    clients_out = []
-    for c in clients.values():
-        c["accounts"] = sorted(c["accounts"].values(), key=lambda x: x["name"].lower())
-        clients_out.append(c)
-    clients_out.sort(key=lambda x: (_severity_rank(x["status"]) * -1, x["name"].lower()))
+    customers_out = []
+    for c in customers.values():
+        c["environments"] = sorted(c["environments"].values(), key=lambda x: x["name"].lower())
+        customers_out.append(c)
+    customers_out.sort(key=lambda x: (_severity_rank(x["status"]) * -1, x["name"].lower()))
     assets.sort(key=lambda x: (_severity_rank(x["severity"]) * -1, x["type"], x["name"].lower()))
 
     return {
         "totals": totals,
-        "clients": clients_out,
+        "customers": customers_out,
         "assets": assets,
         "alert_settings": settings,
     }
 
 
-def _migrate_servers(client_from, client_to, account_from=None, account_to=None):
-    client_to = (client_to or "").strip() or DEFAULT_CLIENT
-    account_to = (account_to or "").strip() or DEFAULT_ACCOUNT
+def _migrate_servers(customer_from, customer_to, environment_from=None, environment_to=None):
+    customer_to = (customer_to or "").strip() or DEFAULT_CUSTOMER
+    environment_to = (environment_to or "").strip() or DEFAULT_ENVIRONMENT
     nodes = load_nodes()
     moved = 0
     for n in nodes:
-        if node_client(n) != client_from:
+        if node_customer(n) != customer_from:
             continue
-        if account_from is not None and node_account(n) != account_from:
+        if environment_from is not None and node_environment(n) != environment_from:
             continue
-        n["client"] = client_to
-        n["account"] = account_to
+        n["customer"] = customer_to
+        n["environment"] = environment_to
+        n.pop("client", None)
+        n.pop("account", None)
         moved += 1
     if moved:
         save_nodes(nodes)
-        record_taxonomy(client_to, account_to)
+        record_taxonomy(customer_to, environment_to)
     return moved
 
 
-def _migrate_kuma_sites(client_from, client_to, account_from=None, account_to=None):
-    client_to = (client_to or "").strip() or DEFAULT_CLIENT
-    account_to = (account_to or "").strip() or DEFAULT_ACCOUNT
+def _migrate_kuma_sites(customer_from, customer_to, environment_from=None, environment_to=None):
+    customer_to = (customer_to or "").strip() or DEFAULT_CUSTOMER
+    environment_to = (environment_to or "").strip() or DEFAULT_ENVIRONMENT
     sites = load_kuma_site_meta()
     moved = 0
     for s in sites.values():
-        c, a, _ = normalize_metadata(s.get("client", ""), s.get("account", ""), "")
-        if c != client_from:
+        c, a, _ = normalize_metadata(_read_customer(s), _read_environment(s), "")
+        if c != customer_from:
             continue
-        if account_from is not None and a != account_from:
+        if environment_from is not None and a != environment_from:
             continue
-        s["client"] = client_to
-        s["account"] = account_to
+        s["customer"] = customer_to
+        s["environment"] = environment_to
+        s.pop("client", None)
+        s.pop("account", None)
         moved += 1
     if moved:
         save_kuma_site_meta(sites)
-        record_taxonomy(client_to, account_to)
+        record_taxonomy(customer_to, environment_to)
     return moved
 
 
-def add_taxonomy_client(name):
+def add_taxonomy_customer(name):
     raw = (name or "").strip()
     if not raw:
-        return None, "client name is required"
+        return None, "customer name is required"
     c, _, _ = normalize_metadata(raw, "", "")
     if raw.lower() == "unassigned":
-        c = DEFAULT_CLIENT
+        c = DEFAULT_CUSTOMER
     tax = load_taxonomy()
-    clients = set(tax.get("clients", []))
-    clients.add(c)
-    tax["clients"] = sorted(clients)
-    tax.setdefault("accounts", {}).setdefault(c, [])
-    if DEFAULT_ACCOUNT not in tax["accounts"][c]:
-        tax["accounts"][c] = sorted(set(tax["accounts"][c]) | {DEFAULT_ACCOUNT})
+    customers = set(tax.get("customers", []))
+    customers.add(c)
+    tax["customers"] = sorted(customers)
+    tax.setdefault("environments", {}).setdefault(c, [])
+    if DEFAULT_ENVIRONMENT not in tax["environments"][c]:
+        tax["environments"][c] = sorted(set(tax["environments"][c]) | {DEFAULT_ENVIRONMENT})
     save_taxonomy(tax)
     return c, None
 
 
-def rename_taxonomy_client(old, new):
+def rename_taxonomy_customer(old, new):
     old = (old or "").strip()
     new = (new or "").strip()
     if not new:
@@ -916,134 +986,167 @@ def rename_taxonomy_client(old, new):
     _migrate_servers(old, c_new)
     _migrate_kuma_sites(old, c_new)
     tax = load_taxonomy()
-    if old in tax.get("accounts", {}):
-        tax["accounts"][c_new] = sorted(set(tax["accounts"].get(c_new, [])) | set(tax["accounts"].pop(old)))
-    clients = {c_new if x == old else x for x in tax.get("clients", [])}
-    tax["clients"] = sorted(clients | {c_new})
+    if old in tax.get("environments", {}):
+        tax["environments"][c_new] = sorted(set(tax["environments"].get(c_new, [])) | set(tax["environments"].pop(old)))
+    customers = {c_new if x == old else x for x in tax.get("customers", [])}
+    tax["customers"] = sorted(customers | {c_new})
     save_taxonomy(tax)
     return None
 
 
-def delete_taxonomy_client(name, merge_into=None):
+def delete_taxonomy_customer(name, merge_into=None):
     name = (name or "").strip()
-    if name in (DEFAULT_CLIENT,):
-        return "cannot delete default client"
+    if name in (DEFAULT_CUSTOMER,):
+        return "cannot delete default customer"
     nodes = load_nodes()
     sites = load_kuma_site_meta()
-    count = sum(1 for n in nodes if node_client(n) == name)
-    site_count = sum(1 for s in sites.values() if normalize_metadata(s.get("client", ""), "", "")[0] == name)
+    count = sum(1 for n in nodes if node_customer(n) == name)
+    site_count = sum(1 for s in sites.values() if normalize_metadata(_read_customer(s), "", "")[0] == name)
     if (count or site_count) and not merge_into:
-        return f"{count} server(s) and {site_count} site(s) still use this client \u2014 pick \u201cmerge into\u201d or reassign them first"
+        return f"{count} server(s) and {site_count} site(s) still use this customer \u2014 pick \u201cmerge into\u201d or reassign them first"
     if merge_into:
         _migrate_servers(name, merge_into.strip())
         _migrate_kuma_sites(name, merge_into.strip())
     tax = load_taxonomy()
-    tax.get("accounts", {}).pop(name, None)
-    tax["clients"] = [c for c in tax.get("clients", []) if c != name]
+    tax.get("environments", {}).pop(name, None)
+    tax["customers"] = [c for c in tax.get("customers", []) if c != name]
     save_taxonomy(tax)
     return None
 
 
-def add_taxonomy_account(client, account):
-    c, a, _ = normalize_metadata(client, account, "")
+def add_taxonomy_environment(customer, environment, **legacy):
+    if not customer and legacy.get("client"):
+        customer = legacy["client"]
+    if not environment and legacy.get("account"):
+        environment = legacy["account"]
+    c, a, _ = normalize_metadata(customer, environment, "")
     tax = load_taxonomy()
-    tax.setdefault("clients", [])
-    if c not in tax["clients"]:
-        tax["clients"] = sorted(set(tax["clients"]) | {c})
-    accts = set(tax.setdefault("accounts", {}).get(c, []))
-    accts.add(a)
-    tax["accounts"][c] = sorted(accts)
+    tax.setdefault("customers", [])
+    if c not in tax["customers"]:
+        tax["customers"] = sorted(set(tax["customers"]) | {c})
+    envs = set(tax.setdefault("environments", {}).get(c, []))
+    envs.add(a)
+    tax["environments"][c] = sorted(envs)
     save_taxonomy(tax)
     return a, None
 
 
-def rename_taxonomy_account(client, old_acc, new_acc):
-    client = (client or "").strip() or DEFAULT_CLIENT
-    old_acc = (old_acc or "").strip()
-    new_acc = (new_acc or "").strip()
-    if not new_acc:
+def rename_taxonomy_environment(customer, old_env, new_env, **legacy):
+    if not customer and legacy.get("client"):
+        customer = legacy["client"]
+    customer = (customer or "").strip() or DEFAULT_CUSTOMER
+    old_env = (old_env or "").strip()
+    new_env = (new_env or "").strip()
+    if not new_env:
         return "new name required"
-    _, a_new, _ = normalize_metadata(client, new_acc, "")
+    _, a_new, _ = normalize_metadata(customer, new_env, "")
     nodes = load_nodes()
     for n in nodes:
-        if node_client(n) == client and node_account(n) == old_acc:
-            n["account"] = a_new
+        if node_customer(n) == customer and node_environment(n) == old_env:
+            n["environment"] = a_new
     save_nodes(nodes)
     sites = load_kuma_site_meta()
     for s in sites.values():
-        c, a, _ = normalize_metadata(s.get("client", ""), s.get("account", ""), "")
-        if c == client and a == old_acc:
-            s["account"] = a_new
+        c, a, _ = normalize_metadata(_read_customer(s), _read_environment(s), "")
+        if c == customer and a == old_env:
+            s["environment"] = a_new
     save_kuma_site_meta(sites)
     tax = load_taxonomy()
-    accts = set(tax.setdefault("accounts", {}).get(client, []))
-    accts.discard(old_acc)
-    accts.add(a_new)
-    tax["accounts"][client] = sorted(accts)
+    envs = set(tax.setdefault("environments", {}).get(customer, []))
+    envs.discard(old_env)
+    envs.add(a_new)
+    tax["environments"][customer] = sorted(envs)
     save_taxonomy(tax)
-    record_taxonomy(client, a_new)
+    record_taxonomy(customer, a_new)
     return None
 
 
-def delete_taxonomy_account(client, account, merge_into=None):
-    client = (client or "").strip() or DEFAULT_CLIENT
-    account = (account or "").strip()
-    if account in (DEFAULT_ACCOUNT,) and client == DEFAULT_CLIENT:
-        return "cannot delete default account under Unassigned"
+def delete_taxonomy_environment(customer, environment, merge_into=None, **legacy):
+    if not customer and legacy.get("client"):
+        customer = legacy["client"]
+    customer = (customer or "").strip() or DEFAULT_CUSTOMER
+    environment = (environment or "").strip()
+    if environment in (DEFAULT_ENVIRONMENT,) and customer == DEFAULT_CUSTOMER:
+        return "cannot delete default environment under Unassigned"
     nodes = load_nodes()
-    count = sum(1 for n in nodes if node_client(n) == client and node_account(n) == account)
+    count = sum(1 for n in nodes if node_customer(n) == customer and node_environment(n) == environment)
     sites = load_kuma_site_meta()
     site_count = sum(
         1 for s in sites.values()
-        if normalize_metadata(s.get("client", ""), "", "")[0] == client
-        and normalize_metadata("", s.get("account", ""), "")[1] == account
+        if normalize_metadata(_read_customer(s), "", "")[0] == customer
+        and normalize_metadata("", _read_environment(s), "")[1] == environment
     )
     if (count or site_count) and not merge_into:
-        return f"{count} server(s) and {site_count} site(s) use this account \u2014 merge into another account first"
+        return f"{count} server(s) and {site_count} site(s) use this environment \u2014 merge into another environment first"
     if merge_into:
-        _migrate_servers(client, client, account, merge_into.strip())
-        _migrate_kuma_sites(client, client, account, merge_into.strip())
+        _migrate_servers(customer, customer, environment, merge_into.strip())
+        _migrate_kuma_sites(customer, customer, environment, merge_into.strip())
     tax = load_taxonomy()
-    accts = [a for a in tax.get("accounts", {}).get(client, []) if a != account]
-    tax.setdefault("accounts", {})[client] = accts
+    envs = [a for a in tax.get("environments", {}).get(customer, []) if a != environment]
+    tax.setdefault("environments", {})[customer] = envs
     save_taxonomy(tax)
     return None
 
 
-def filter_nodes(nodes, client="", account=""):
-    if client and client not in ("", ".*", "$__all", "All"):
-        if client == DEFAULT_CLIENT:
-            nodes = [n for n in nodes if node_client(n) == DEFAULT_CLIENT]
+def filter_nodes(nodes, customer="", environment="", **legacy):
+    if not customer and legacy.get("client"):
+        customer = legacy["client"]
+    if not environment and legacy.get("account"):
+        environment = legacy["account"]
+    if customer and customer not in ("", ".*", "$__all", "All"):
+        if customer == DEFAULT_CUSTOMER:
+            nodes = [n for n in nodes if node_customer(n) == DEFAULT_CUSTOMER]
         else:
-            nodes = [n for n in nodes if node_client(n) == client]
-    if account and account not in ("", ".*", "$__all", "All"):
-        if account == DEFAULT_ACCOUNT:
-            nodes = [n for n in nodes if node_account(n) == DEFAULT_ACCOUNT]
+            nodes = [n for n in nodes if node_customer(n) == customer]
+    if environment and environment not in ("", ".*", "$__all", "All"):
+        if environment == DEFAULT_ENVIRONMENT:
+            nodes = [n for n in nodes if node_environment(n) == DEFAULT_ENVIRONMENT]
         else:
-            nodes = [n for n in nodes if node_account(n) == account]
+            nodes = [n for n in nodes if node_environment(n) == environment]
     return nodes
 
 
 def migrate_nodes():
-    """Backfill empty client/account on existing registrations."""
+    """Backfill empty customer/environment and migrate legacy client/account keys."""
     nodes = load_nodes()
     changed = False
     for n in nodes:
-        c, a, _ = normalize_metadata(n.get("client", ""), n.get("account", ""))
-        if n.get("client", "") != c:
-            n["client"] = c
+        if _migrate_legacy_fields(n):
             changed = True
-        if n.get("account", "") != a:
-            n["account"] = a
+        c, a, _ = normalize_metadata(_read_customer(n), _read_environment(n))
+        if n.get("customer", "") != c:
+            n["customer"] = c
             changed = True
+        if n.get("environment", "") != a:
+            n["environment"] = a
+            changed = True
+        n.pop("client", None)
+        n.pop("account", None)
         if not n.get("name"):
             n["name"] = n["hostname"]
             changed = True
     if changed:
         save_nodes(nodes)
 
+    meta = load_kuma_site_meta()
+    kuma_changed = False
+    for s in meta.values():
+        if _migrate_legacy_fields(s):
+            kuma_changed = True
+        c, a, _ = normalize_metadata(_read_customer(s), _read_environment(s))
+        if s.get("customer", "") != c:
+            s["customer"] = c
+            kuma_changed = True
+        if s.get("environment", "") != a:
+            s["environment"] = a
+            kuma_changed = True
+        s.pop("client", None)
+        s.pop("account", None)
+    if kuma_changed:
+        save_kuma_site_meta(meta)
 
-# ---- alert recipients (per-client email) ------------------------------------
+
+# ---- alert recipients (per-customer email) --------------------------------
 
 def parse_emails(value):
     """Accept a list or a comma/semicolon/space/newline-separated string and
@@ -1103,7 +1206,7 @@ def _normalize_recipient(info):
 
 
 def load_alert_recipients():
-    """{client: {'recipients': [{'email','enabled'}]}}"""
+    """{customer: {'recipients': [{'email','enabled'}]}}"""
     raw = _read_json(ALERT_RECIPIENTS_FILE, {})
     return {c: _normalize_recipient(v) for c, v in raw.items()}
 
@@ -1112,8 +1215,10 @@ def save_alert_recipients(data):
     _write_json(ALERT_RECIPIENTS_FILE, data)
 
 
-def get_alert_recipient(client):
-    return load_alert_recipients().get(client, {"recipients": []})
+def get_alert_recipient(customer, **legacy):
+    if not customer and legacy.get("client"):
+        customer = legacy["client"]
+    return load_alert_recipients().get(customer, {"recipients": []})
 
 
 def enabled_emails(info):
@@ -1121,24 +1226,26 @@ def enabled_emails(info):
     return [r["email"] for r in (info or {}).get("recipients", []) if r.get("enabled")]
 
 
-def set_alert_recipient(client, recipients):
+def set_alert_recipient(customer, recipients, **legacy):
     """recipients: list of {email,enabled} | list of str | comma string."""
-    client = (client or "").strip()
+    if not customer and legacy.get("client"):
+        customer = legacy["client"]
+    customer = (customer or "").strip()
     data = load_alert_recipients()
     norm = _normalize_recipient({"recipients": _coerce_recipients(recipients)})
     if not norm["recipients"]:
-        data.pop(client, None)
+        data.pop(customer, None)
     else:
-        data[client] = norm
+        data[customer] = norm
     save_alert_recipients(data)
-    return data.get(client, {"recipients": []})
+    return data.get(customer, {"recipients": []})
 
 
-def client_host_map():
-    """Authoritative client -> [hostnames] mapping from the node registry."""
+def customer_host_map():
+    """Authoritative customer -> [hostnames] mapping from the node registry."""
     out = {}
     for n in load_nodes():
-        c = node_client(n)
+        c = node_customer(n)
         out.setdefault(c, []).append(n["hostname"])
     return out
 
@@ -1397,3 +1504,19 @@ def set_kuma_site_groups(monitor_name, group_ids):
     if changed:
         save_alert_groups(groups)
     return [g["id"] for g in groups if monitor_name in g.get("sites", [])]
+
+
+# ---- backward compatibility aliases -----------------------------------------
+
+node_client = node_customer
+node_account = node_environment
+client_host_map = customer_host_map
+client_kuma_site_map = customer_kuma_site_map
+list_all_clients = list_all_customers
+list_accounts_for_client = list_environments_for_customer
+add_taxonomy_client = add_taxonomy_customer
+rename_taxonomy_client = rename_taxonomy_customer
+delete_taxonomy_client = delete_taxonomy_customer
+add_taxonomy_account = add_taxonomy_environment
+rename_taxonomy_account = rename_taxonomy_environment
+delete_taxonomy_account = delete_taxonomy_environment

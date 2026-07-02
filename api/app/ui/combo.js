@@ -1,12 +1,15 @@
-async function fetchClients(){
-  const r=await fetch(API+'/api/v1/variables/clients').then(x=>x.json()).catch(()=>[]);
+async function fetchCustomers(){
+  const r=await fetch(API+'/api/v1/variables/customers').then(x=>x.json()).catch(()=>[]);
   return r.map(x=>x.__value||x);
 }
-async function fetchAccounts(client){
-  const u=API+'/api/v1/variables/accounts?client='+encodeURIComponent(client||'');
+async function fetchEnvironments(customer){
+  const u=API+'/api/v1/variables/environments?customer='+encodeURIComponent(customer||'');
   const r=await fetch(u).then(x=>x.json()).catch(()=>[]);
   return r.map(x=>x.__value||x);
 }
+// Legacy aliases
+const fetchClients = fetchCustomers;
+const fetchAccounts = fetchEnvironments;
 function fillCombo(selId,newId,values,current){
   const sel=document.getElementById(selId),inp=document.getElementById(newId);
   sel.innerHTML='';

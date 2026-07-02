@@ -23,8 +23,11 @@ LISTEN_HOST = os.environ.get("MONITOR_HOST", "0.0.0.0")
 LISTEN_PORT = int(os.environ.get("MONITOR_PORT", "9099"))
 PROMETHEUS_URL = os.environ.get("MONITOR_PROMETHEUS_URL", "http://127.0.0.1:9090").rstrip("/")
 
-DEFAULT_CLIENT = "Unassigned"
-DEFAULT_ACCOUNT = "default"
+DEFAULT_CUSTOMER = "Unassigned"
+DEFAULT_ENVIRONMENT = "default"
+# Backward compatibility (remove once all callers use new names)
+DEFAULT_CLIENT = DEFAULT_CUSTOMER
+DEFAULT_ACCOUNT = DEFAULT_ENVIRONMENT
 # Reserved recipient key for the admin/fallback contact point (root catch-all).
 ADMIN_KEY = "__admin__"
 

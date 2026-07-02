@@ -11,14 +11,14 @@ STANDARD_TEMPLATING = [
         "current": {"text": "All", "value": "$__all"},
         "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "__INFINITY_DS_UID__"},
         "includeAll": True,
-        "label": "Client",
-        "name": "client",
+        "label": "Customer",
+        "name": "customer",
         "query": {
             "infinityQuery": {
                 "refId": "variable",
                 "source": "url",
                 "type": "json",
-                "url": "/api/v1/variables/clients",
+                "url": "/api/v1/variables/customers",
             },
             "queryType": "infinity",
             "type": "infinity",
@@ -31,14 +31,14 @@ STANDARD_TEMPLATING = [
         "current": {"text": "All", "value": "$__all"},
         "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "__INFINITY_DS_UID__"},
         "includeAll": True,
-        "label": "Account",
-        "name": "account",
+        "label": "Environment",
+        "name": "environment",
         "query": {
             "infinityQuery": {
                 "refId": "variable",
                 "source": "url",
                 "type": "json",
-                "url": "/api/v1/variables/accounts?client=${client}",
+                "url": "/api/v1/variables/environments?customer=${customer}",
             },
             "queryType": "infinity",
             "type": "infinity",
@@ -56,7 +56,7 @@ STANDARD_TEMPLATING = [
                 "refId": "variable",
                 "source": "url",
                 "type": "json",
-                "url": "/api/v1/variables/hosts?client=${client}&account=${account}",
+                "url": "/api/v1/variables/hosts?customer=${customer}&environment=${environment}",
             },
             "queryType": "infinity",
             "type": "infinity",
@@ -116,7 +116,7 @@ def main():
         text = json.dumps(data, indent=2 if not compact else None, separators=(",", ":") if compact else None)
         text = text.replace(
             "var-host=${host}&${__url_time_range}",
-            "var-client=${client}&var-account=${account}&var-host=${host}&${__url_time_range}",
+            "var-customer=${customer}&var-environment=${environment}&var-host=${host}&${__url_time_range}",
         )
         path.write_text(text + ("\n" if path.name == "summary.json" else ""))
         print("ok", path.name)

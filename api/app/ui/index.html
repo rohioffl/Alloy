@@ -24,12 +24,12 @@ th{color:#666;font-weight:500}
 .click-row{cursor:pointer}.click-row:hover{background:#1a1a2e}
 </style></head><body>
 <h1>Central Monitoring API</h1>
-<p class="sub">Name servers, organize by client/account, and manage port probes — no SSH required.</p>
+<p class="sub">Name servers, organize by customer/environment, and manage port probes — no SSH required.</p>
 <div class="tabs">
 <span class="tab active" data-tab="servers">Servers</span>
 <span class="tab" data-tab="ports">Ports</span>
 <span class="tab" data-tab="api">API Docs</span>
-<span class="tab" data-tab="client-orgs">Client Orgs</span>
+<span class="tab" data-tab="customer-orgs">Customer Orgs</span>
 </div>
 
 <div id="servers" class="section active">
@@ -40,8 +40,8 @@ th{color:#666;font-weight:500}
 <div><label>Hostname</label><select id="edit-host" style="width:100%"></select></div>
 <div><label>Display name</label><input id="edit-name"/></div>
 <div><label>IP (from install)</label><input id="edit-ip" readonly title="Set when Alloy registers; re-run install-alloy.sh to refresh"/></div>
-<div><label>Client</label><select id="edit-client-sel" style="width:100%" onchange="onCombo('edit-client-sel','edit-client-new',refreshEditAccounts)"></select><input id="edit-client-new" style="display:none;margin-top:6px;width:100%" placeholder="New client name"/></div>
-<div><label>Account</label><select id="edit-account-sel" style="width:100%" onchange="onCombo('edit-account-sel','edit-account-new')"></select><input id="edit-account-new" style="display:none;margin-top:6px;width:100%" placeholder="New account name"/></div>
+<div><label>Customer</label><select id="edit-customer-sel" style="width:100%" onchange="onCombo('edit-customer-sel','edit-customer-new',refreshEditEnvironments)"></select><input id="edit-customer-new" style="display:none;margin-top:6px;width:100%" placeholder="New customer name"/></div>
+<div><label>Environment</label><select id="edit-environment-sel" style="width:100%" onchange="onCombo('edit-environment-sel','edit-environment-new')"></select><input id="edit-environment-new" style="display:none;margin-top:6px;width:100%" placeholder="New environment name"/></div>
 </div>
 <button class="btn btn-primary" onclick="saveServer()">Save</button>
 <button class="btn btn-danger" onclick="deleteServer()">Delete</button>
@@ -68,15 +68,15 @@ th{color:#666;font-weight:500}
 </div>
 
 
-<div id="client-orgs" class="section">
+<div id="customer-orgs" class="section">
 <div class="card">
-<h2>Client Organizations</h2>
-<p class="sub" style="margin-bottom:12px">Each client gets a separate Grafana org with read-only access to their servers only. Assign servers to a client using the Servers tab first.</p>
+<h2>Customer Organizations</h2>
+<p class="sub" style="margin-bottom:12px">Each customer gets a separate Grafana org with read-only access to their servers only. Assign servers to a customer using the Servers tab first.</p>
 <div id="orgs-list" style="margin-bottom:16px"></div>
 <div class="row" style="align-items:flex-end">
-<div><label>Client name (must match exactly from Servers tab)</label><input id="new-org-client" placeholder="e.g. Acme Corp" style="width:100%"/></div>
+<div><label>Customer name (must match exactly from Servers tab)</label><input id="new-org-customer" placeholder="e.g. Acme Corp" style="width:100%"/></div>
 <div><label>Viewer password</label><input id="new-org-password" type="password" placeholder="ChangeMe@2026" style="width:100%"/></div>
-<div style="padding-top:18px"><button class="btn btn-primary" onclick="createOrg()">Create Client Org</button></div>
+<div style="padding-top:18px"><button class="btn btn-primary" onclick="createOrg()">Create Customer Org</button></div>
 </div>
 <span id="org-status" style="font-size:12px;margin-top:8px;display:block"></span>
 </div>
@@ -87,13 +87,15 @@ th{color:#666;font-weight:500}
 
 <script>
 __SCRIPT__
+function metaCustomer(x){return (x&&x.customer)||(x&&x.client)||'';}
+function metaEnvironment(x){return (x&&x.environment)||(x&&x.account)||'';}
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===t));
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.getElementById(t.dataset.tab).classList.add('active');
   if(t.dataset.tab==='ports')loadHostSelect();
   if(t.dataset.tab==='api')loadDocs();
-  if(t.dataset.tab==='client-orgs')loadOrgs();
+  if(t.dataset.tab==='customer-orgs')loadOrgs();
 });
 const qs=new URLSearchParams(location.search);
 if(qs.get('tab')==='ports'){document.querySelector('[data-tab=ports]').click();}
@@ -107,18 +109,18 @@ async function loadTree(){
   const nodes=d.servers||[];
   const tree={};
   nodes.forEach(n=>{
-    const c=n.client||'Unassigned',a=n.account||'default';
+    const c=metaCustomer(n)||'Unassigned',a=metaEnvironment(n)||'default';
     if(!tree[c])tree[c]={};if(!tree[c][a])tree[c][a]=[];
     tree[c][a].push(n);
   });
   let html='';
-  Object.keys(tree).sort().forEach(client=>{
-    const accounts=tree[client];
-    const cnt=Object.values(accounts).reduce((s,a)=>s+a.length,0);
-    html+=`<div class="card"><strong>${client}</strong> <span class="badge">${cnt} servers</span>`;
-    Object.keys(accounts).sort().forEach(account=>{
-      html+=`<div class="indent"><h2 style="font-size:12px;color:#888;margin:8px 0">${account}</h2><table><thead><tr><th>Hostname</th><th>Name</th><th>IP</th><th>Ports</th></tr></thead><tbody>`;
-      accounts[account].forEach(s=>{
+  Object.keys(tree).sort().forEach(customer=>{
+    const environments=tree[customer];
+    const cnt=Object.values(environments).reduce((s,a)=>s+a.length,0);
+    html+=`<div class="card"><strong>${customer}</strong> <span class="badge">${cnt} servers</span>`;
+    Object.keys(environments).sort().forEach(environment=>{
+      html+=`<div class="indent"><h2 style="font-size:12px;color:#888;margin:8px 0">${environment}</h2><table><thead><tr><th>Hostname</th><th>Name</th><th>IP</th><th>Ports</th></tr></thead><tbody>`;
+      environments[environment].forEach(s=>{
         html+=`<tr class="click-row" onclick="selectServer('${s.hostname}')"><td>${s.hostname}</td><td>${s.name||'-'}</td><td>${s.ip||'-'}</td><td>${s.port_count||0}</td></tr>`;
       });
       html+='</tbody></table></div>';
@@ -133,10 +135,10 @@ async function loadTree(){
   if(prev)sel.value=prev;
 }
 
-async function refreshEditAccounts(){
-  const c=comboVal('edit-client-sel','edit-client-new');
-  const acc=await fetchAccounts(c);
-  fillCombo('edit-account-sel','edit-account-new',acc,document.getElementById('edit-account-sel').dataset.current||'');
+async function refreshEditEnvironments(){
+  const c=comboVal('edit-customer-sel','edit-customer-new');
+  const acc=await fetchEnvironments(c);
+  fillCombo('edit-environment-sel','edit-environment-new',acc,document.getElementById('edit-environment-sel').dataset.current||'');
 }
 
 function selectServer(h){
@@ -144,18 +146,18 @@ function selectServer(h){
   j(API+'/api/v1/servers/'+encodeURIComponent(h)).then(async n=>{
     document.getElementById('edit-name').value=n.name||'';
     document.getElementById('edit-ip').value=n.ip||'';
-    const clients=await fetchClients();
-    fillCombo('edit-client-sel','edit-client-new',clients,n.client||'');
-    const acc=await fetchAccounts(n.client||'');
-    document.getElementById('edit-account-sel').dataset.current=n.account||'';
-    fillCombo('edit-account-sel','edit-account-new',acc,n.account||'');
+    const customers=await fetchCustomers();
+    fillCombo('edit-customer-sel','edit-customer-new',customers,metaCustomer(n));
+    const acc=await fetchEnvironments(metaCustomer(n));
+    document.getElementById('edit-environment-sel').dataset.current=metaEnvironment(n);
+    fillCombo('edit-environment-sel','edit-environment-new',acc,metaEnvironment(n));
   });
 }
 
 async function saveServer(){
   const h=document.getElementById('edit-host').value;
   if(!h){setSt('status','Select a server',false);return;}
-  const body={name:document.getElementById('edit-name').value.trim(),client:comboVal('edit-client-sel','edit-client-new'),account:comboVal('edit-account-sel','edit-account-new')};
+  const body={name:document.getElementById('edit-name').value.trim(),customer:comboVal('edit-customer-sel','edit-customer-new'),environment:comboVal('edit-environment-sel','edit-environment-new')};
   const d=await j(API+'/api/v1/servers/'+encodeURIComponent(h),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   setSt('status',d.message||d.error,!d.error);loadTree();
 }
@@ -207,29 +209,30 @@ async function loadOrgs(){
   const el=document.getElementById('orgs-list');
   const d=await j(API+'/api/v1/grafana-orgs/status').catch(()=>({orgs:[]}));
   const orgs=d.orgs||[];
-  if(!orgs.length){el.innerHTML='<p style="color:#666">No client orgs yet.</p>';return;}
-  let html='<table><thead><tr><th>Client</th><th>Servers</th><th>Login</th><th>Dashboard</th><th></th></tr></thead><tbody>';
+  if(!orgs.length){el.innerHTML='<p style="color:#666">No customer orgs yet.</p>';return;}
+  let html='<table><thead><tr><th>Customer</th><th>Servers</th><th>Login</th><th>Dashboard</th><th></th></tr></thead><tbody>';
   orgs.forEach(o=>{
+    const customer=o.customer||o.client||'';
     const dash=o.dashboard_url?'<a href="'+o.dashboard_url+'" target="_blank" style="color:#3b82f6">Open</a>':'-';
-    html+=`<tr><td>${o.client}</td><td>${o.server_count}</td><td>${o.login||'-'}</td><td>${dash}</td><td><button class="btn btn-danger" style="padding:4px 10px;font-size:11px" onclick="deleteOrg('${o.client}')">Delete</button></td></tr>`;
+    html+=`<tr><td>${customer}</td><td>${o.server_count}</td><td>${o.login||'-'}</td><td>${dash}</td><td><button class="btn btn-danger" style="padding:4px 10px;font-size:11px" onclick="deleteOrg('${customer}')">Delete</button></td></tr>`;
   });
   html+='</tbody></table>';
   el.innerHTML=html;
 }
 
 async function createOrg(){
-  const client=document.getElementById('new-org-client').value.trim();
+  const customer=document.getElementById('new-org-customer').value.trim();
   const password=document.getElementById('new-org-password').value||'ChangeMe@2026';
-  if(!client){setSt('org-status','Client name required',false);return;}
+  if(!customer){setSt('org-status','Customer name required',false);return;}
   setSt('org-status','Creating org...',true);
-  const d=await j(API+'/api/v1/grafana-orgs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client,password})}).catch(e=>({error:String(e)}));
+  const d=await j(API+'/api/v1/grafana-orgs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer,password})}).catch(e=>({error:String(e)}));
   setSt('org-status',d.error?('Error: '+d.error):('Created! Login: '+d.login+' / '+password),!d.error);
-  if(!d.error){document.getElementById('new-org-client').value='';document.getElementById('new-org-password').value='';loadOrgs();}
+  if(!d.error){document.getElementById('new-org-customer').value='';document.getElementById('new-org-password').value='';loadOrgs();}
 }
 
-async function deleteOrg(client){
-  if(!confirm('Delete the Grafana portal for "'+client+'"? Removes their org, dashboard, and viewer login. Servers are NOT affected.'))return;
-  await j(API+'/api/v1/grafana-orgs/'+encodeURIComponent(client),{method:'DELETE'}).catch(()=>{});
+async function deleteOrg(customer){
+  if(!confirm('Delete the Grafana portal for "'+customer+'"? Removes their org, dashboard, and viewer login. Servers are NOT affected.'))return;
+  await j(API+'/api/v1/grafana-orgs/'+encodeURIComponent(customer),{method:'DELETE'}).catch(()=>{});
   loadOrgs();
 }
 

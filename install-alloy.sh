@@ -11,14 +11,16 @@
 #       -remote-write=https://zentra.ankercloud.com/prometheus/api/v1/write \
 #       -api-url=https://zentra.ankercloud.com/monitor-api \
 #       -install-token=TOKEN \
-#       -client=CLIENT -account=ACCOUNT -name="Display Name"
+#       -customer=CUSTOMER -environment=ENVIRONMENT -name="Display Name"
 #
 # Flags:
 #   -remote-write=URL    Prometheus remote_write endpoint (required)
 #   -api-url=URL         Central monitoring API (optional; derived from remote-write host)
 #   -install-token=TOKEN Install token for /api/v1/servers/register
-#   -client=NAME         Client label (default: Unassigned)
-#   -account=NAME         Account label (default: default)
+#   -customer=NAME       Customer label (default: Unassigned)
+#   -environment=NAME    Environment label (default: default)
+#   -client=NAME         Legacy alias for -customer
+#   -account=NAME        Legacy alias for -environment
 #   -name=NAME            Display name (default: hostname)
 #   -loki=URL            Loki push endpoint (optional)
 #   -processes=NAMES     Comma-separated process names or "auto" (default: auto)
@@ -32,8 +34,8 @@ set -euo pipefail
 REMOTE_WRITE_URL="${REMOTE_WRITE_URL:-}"
 LOKI_URL="${LOKI_URL:-}"
 PROCESS_NAMES="${PROCESS_NAMES:-auto}"
-ACCOUNT="${ACCOUNT:-default}"
-CLIENT="${CLIENT:-Unassigned}"
+CUSTOMER="${CUSTOMER:-Unassigned}"
+ENVIRONMENT="${ENVIRONMENT:-default}"
 NODE_NAME="${NODE_NAME:-}"
 INSTALL_TOKEN="${INSTALL_TOKEN:-}"
 PORT_API_URL="${PORT_API_URL:-}"
@@ -48,8 +50,10 @@ for arg in "$@"; do
     -api-url=*)       PORT_API_URL="${arg#*=}" ;;
     -loki=*)          LOKI_URL="${arg#*=}" ;;
     -processes=*)     PROCESS_NAMES="${arg#*=}" ;;
-    -account=*)       ACCOUNT="${arg#*=}" ;;
-    -client=*)        CLIENT="${arg#*=}" ;;
+    -environment=*)   ENVIRONMENT="${arg#*=}" ;;
+    -customer=*)      CUSTOMER="${arg#*=}" ;;
+    -account=*)        ENVIRONMENT="${arg#*=}" ;;
+    -client=*)         CUSTOMER="${arg#*=}" ;;
     -install-token=*) INSTALL_TOKEN="${arg#*=}" ;;
     -name=*)          NODE_NAME="${arg#*=}" ;;
     -uninstall|--uninstall|-u) DO_UNINSTALL=1 ;;
@@ -303,8 +307,8 @@ prometheus.remote_write "central" {
     }
   }
   external_labels = {
-    client  = "${CLIENT}",
-    account = "${ACCOUNT}",
+    customer    = "${CUSTOMER}",
+    environment = "${ENVIRONMENT}",
     $([ -n "$NODE_NAME" ] && echo "node_name = \"${NODE_NAME}\",")
   }
 }
@@ -370,10 +374,10 @@ REG_HEADERS=(-H "Content-Type: application/json")
 [ -n "$INSTALL_TOKEN" ] && REG_HEADERS+=(-H "X-Install-Token: ${INSTALL_TOKEN}")
 REG_RESULT=$(curl -s -X POST "${PORT_API_URL}/api/v1/servers/register" \
   "${REG_HEADERS[@]}" \
-  -d "{\"hostname\":\"${NODE_HOSTNAME}\",\"ip\":\"${NODE_IP}\",\"account\":\"${ACCOUNT}\",\"client\":\"${CLIENT}\",\"name\":\"${NODE_NAME}\"}" 2>/dev/null || echo "")
+  -d "{\"hostname\":\"${NODE_HOSTNAME}\",\"ip\":\"${NODE_IP}\",\"customer\":\"${CUSTOMER}\",\"environment\":\"${ENVIRONMENT}\",\"name\":\"${NODE_NAME}\"}" 2>/dev/null || echo "")
 
 if echo "$REG_RESULT" | grep -qiE 'Registered|Updated|Added'; then
-  ok "Registered as '${NODE_HOSTNAME}' (${NODE_IP}) client=${CLIENT} account=${ACCOUNT}"
+  ok "Registered as '${NODE_HOSTNAME}' (${NODE_IP}) customer=${CUSTOMER} environment=${ENVIRONMENT}"
 else
   warn "Could not register with central API (${PORT_API_URL}) — node will still send metrics"
 fi
