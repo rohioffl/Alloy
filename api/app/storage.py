@@ -1256,7 +1256,7 @@ _ALERT_RULE_DEFAULTS = {
     "node_down": {
         "enabled": True,
         "duration_minutes": 2,
-        "severity": "critical",
+        "severity": "warning",
     },
     "port_down": {
         "enabled": True,

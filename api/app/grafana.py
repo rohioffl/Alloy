@@ -962,7 +962,7 @@ def _builtin_alert_rules():
     rules = [
         _alert_rule(
             "efohj7qoihzi8b", "Node Down", "availability", node_status, "lt", 1, dur("node_down", 2),
-            sev("node_down", "critical"), "{{ $labels.name }} ({{ $labels.host }}) is DOWN",
+            sev("node_down", "warning"), "{{ $labels.name }} ({{ $labels.host }}) is DOWN",
             host_context + "\n\nThe node is reporting up=0 or has stopped sending metrics.",
             no_data="Alerting", exec_err="Alerting", is_paused=not enabled("node_down"),
         ),
@@ -1170,12 +1170,18 @@ def _read_alert_template_file(filename, fallback=""):
         return fallback
 
 
+def _grafana_public_url():
+    cfg = load_config()
+    return (os.environ.get("GRAFANA_ROOT_URL") or cfg.get("grafana_url") or "http://localhost:3000").rstrip("/")
+
+
 def _zentra_notification_template():
     logo_url = f"{_monitor_public_url()}/alert/logo-email.png"
+    grafana_root = _grafana_public_url()
     html_body = _read_alert_template_file(
         "ng_alert_notification.html",
         fallback="<p>Zentra alert notification</p>",
-    ).replace("__LOGO_URL__", logo_url)
+    ).replace("__LOGO_URL__", logo_url).replace("__GRAFANA_ROOT__", grafana_root)
     text_body = _read_alert_template_file(
         "ng_alert_notification.txt",
         fallback="Zentra alert notification\n",
@@ -1183,7 +1189,12 @@ def _zentra_notification_template():
     return (
         '{{ define "zentra.email.subject" }}[Zentra] {{ .Status | toUpper }}'
         '{{ if .CommonLabels.alertname }} {{ .CommonLabels.alertname }}{{ end }}'
-        '{{ if .CommonLabels.severity }} · {{ .CommonLabels.severity | toUpper }}{{ end }}{{ end }}\n'
+        '{{ if or .CommonLabels.name .CommonLabels.monitor_name .CommonLabels.host }} -'
+        '{{ if .CommonLabels.name }} {{ .CommonLabels.name }}'
+        '{{ else if .CommonLabels.monitor_name }} {{ .CommonLabels.monitor_name }}'
+        '{{ else if .CommonLabels.host }} {{ .CommonLabels.host }}{{ end }}'
+        '{{ if and .CommonLabels.name .CommonLabels.host }} ({{ .CommonLabels.host }}){{ end }}'
+        '{{ end }}{{ end }}\n'
         '{{ define "zentra.email.html" }}' + html_body + '{{ end }}\n'
         '{{ define "zentra.email.message" }}' + text_body + '{{ end }}'
     )
