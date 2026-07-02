@@ -2,6 +2,9 @@ version: '3.8'
 
 # Complete Alloy Monitoring Platform Stack
 # Includes: Grafana, Prometheus, Central API, Uptime Kuma
+#
+# Persistent data lives on the dedicated NVMe disk (default /data/monitoring).
+# Run: sudo ./scripts/setup-monitoring-disk.sh --migrate
 
 services:
   # ============================================================================
@@ -26,7 +29,7 @@ services:
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/alerts:/etc/prometheus/alerts:ro
-      - prometheus-data:/prometheus
+      - ${MONITORING_DATA_DIR:-/data/monitoring}/prometheus:/prometheus
     networks:
       - monitoring
     healthcheck:
@@ -101,10 +104,12 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - grafana-data:/var/lib/grafana
+      - ${MONITORING_DATA_DIR:-/data/monitoring}/grafana:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./dashboards:/etc/grafana/dashboards:ro
       - ./alert:/etc/grafana/custom/alert:ro
+      - ./alert/grafana_email_wrapper.html:/usr/share/grafana/public/emails/ng_alert_notification.html:ro
+      - ./alert/grafana_email_wrapper.txt:/usr/share/grafana/public/emails/ng_alert_notification.txt:ro
     networks:
       - monitoring
     depends_on:
@@ -151,8 +156,9 @@ services:
     ports:
       - "9099:9099"
     volumes:
-      - monitor-data:/var/lib/port-monitor
-      - monitor-config:/etc/port-monitor
+      - ${MONITORING_DATA_DIR:-/data/monitoring}/monitor-data:/var/lib/port-monitor
+      - ${MONITORING_DATA_DIR:-/data/monitoring}/monitor-config:/etc/port-monitor
+      - ./alert:/opt/port-monitor-api/alert:ro
     networks:
       - monitoring
     depends_on:
@@ -174,7 +180,7 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      - uptime-kuma-data:/app/data
+      - ${MONITORING_DATA_DIR:-/data/monitoring}/uptime-kuma:/app/data
     networks:
       - monitoring
     environment:
@@ -233,20 +239,17 @@ networks:
     name: monitoring-network
 
 # ============================================================================
-# Volumes
+# Volumes — bind-mounted under MONITORING_DATA_DIR (see scripts/setup-monitoring-disk.sh)
 # ============================================================================
-volumes:
-  prometheus-data:
-    name: prometheus-data
-  grafana-data:
-    name: grafana-data
-  monitor-data:
-    name: monitor-data
-  monitor-config:
-    name: monitor-config
-  uptime-kuma-data:
-    name: uptime-kuma-data
-  # postgres-data:
-  #   name: postgres-data
-  # alertmanager-data:
-  #   name: alertmanager-data
+# Named volumes kept for reference only; stack uses /data/monitoring on nvme1n1.
+# volumes:
+#   prometheus-data:
+#     name: prometheus-data
+#   grafana-data:
+#     name: grafana-data
+#   monitor-data:
+#     name: monitor-data
+#   monitor-config:
+#     name: monitor-config
+#   uptime-kuma-data:
+#     name: uptime-kuma-data

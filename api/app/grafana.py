@@ -719,10 +719,12 @@ def _builtin_alert_rules():
         ),
         _alert_rule(
             "uptime-kuma-source-down", "Site Monitoring Source Down", "uptime-kuma",
-            'max(up{job="uptime-kuma"})',
+            'max by (instance, job) (up{job="uptime-kuma"})',
             "lt", 1, dur("uptime_kuma_source_down", 2), sev("uptime_kuma_source_down", "critical"),
-            "Site monitoring source is DOWN",
-            "The site monitoring source is not reporting data.",
+            "Site monitoring source {{ $labels.instance }} is DOWN",
+            "Source: {{ $labels.instance }}\n"
+            "Service: {{ $labels.job }}\n\n"
+            "Prometheus cannot scrape Uptime Kuma metrics. Check the /metrics API key in Prometheus.",
             is_paused=not enabled("uptime_kuma_source_down"),
         ),
         _alert_rule(

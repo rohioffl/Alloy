@@ -1163,7 +1163,7 @@ _ALERT_RULE_DEFAULTS = {
         "process_regex": PROCESS_DOWN_DEFAULT_REGEX,
     },
     "uptime_kuma_source_down": {
-        "enabled": True,
+        "enabled": False,
         "duration_minutes": 2,
         "severity": "critical",
     },

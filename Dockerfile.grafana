@@ -8,6 +8,8 @@ COPY branding/generated /tmp/branding
 COPY branding/login-background-dark.svg /tmp/login-background-dark.svg
 COPY branding/zentra-login.css /tmp/zentra-login.css
 COPY branding/zentra-sidebar.css /tmp/zentra-sidebar.css
+COPY alert/grafana_email_wrapper.html /tmp/grafana_email_wrapper.html
+COPY alert/grafana_email_wrapper.txt /tmp/grafana_email_wrapper.txt
 
 # Replace logos in all locations Grafana 13 reads from
 RUN set -e; \
@@ -48,7 +50,10 @@ RUN set -e; \
     cp /tmp/login-background-dark.svg /usr/share/grafana/public/custom/login-background-dark.svg && \
     cp /tmp/zentra-login.css /usr/share/grafana/public/custom/zentra.css && \
     cp /tmp/zentra-sidebar.css /usr/share/grafana/public/custom/zentra-sidebar.css && \
-    rm -f /tmp/login-background-dark.svg /tmp/zentra-login.css /tmp/zentra-sidebar.css
+    rm -f /tmp/login-background-dark.svg /tmp/zentra-login.css /tmp/zentra-sidebar.css; \
+    cp /tmp/grafana_email_wrapper.html /usr/share/grafana/public/emails/ng_alert_notification.html; \
+    cp /tmp/grafana_email_wrapper.txt /usr/share/grafana/public/emails/ng_alert_notification.txt; \
+    rm -f /tmp/grafana_email_wrapper.html /tmp/grafana_email_wrapper.txt
 
 # UI text: Zentra instead of Grafana
 RUN find /usr/share/grafana/public/views -type f -name "*.html" -exec sed -i 's/Grafana/Zentra/g' {} \; 2>/dev/null || true; \
