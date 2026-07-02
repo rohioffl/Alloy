@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY api/ .
 COPY dashboards/ ./app/dashboards/
 COPY alert/ /opt/port-monitor-api/alert/
+COPY install-alloy.sh /opt/port-monitor-api/install-alloy.sh
 
 EXPOSE 9099
 

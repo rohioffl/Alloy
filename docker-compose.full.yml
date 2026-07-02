@@ -159,6 +159,7 @@ services:
       - ${MONITORING_DATA_DIR:-/data/monitoring}/monitor-data:/var/lib/port-monitor
       - ${MONITORING_DATA_DIR:-/data/monitoring}/monitor-config:/etc/port-monitor
       - ./alert:/opt/port-monitor-api/alert:ro
+      - ./install-alloy.sh:/opt/port-monitor-api/install-alloy.sh:ro
     networks:
       - monitoring
     depends_on:

@@ -298,6 +298,32 @@ async def alert_logo():
     return J({"error": "alert logo not found"}, 404)
 
 
+def _install_script_path():
+    candidates = [
+        os.environ.get("MONITOR_INSTALL_SCRIPT_PATH", ""),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "install-alloy.sh")),
+        "/opt/port-monitor-api/install-alloy.sh",
+        "/home/ubuntu/monitoring/install-alloy.sh",
+    ]
+    for path in candidates:
+        if path and os.path.isfile(path):
+            return path
+    return ""
+
+
+@app.get("/install-alloy.sh")
+async def install_alloy_script():
+    path = _install_script_path()
+    if not path:
+        return J({"error": "install-alloy.sh not found"}, 404)
+    return FileResponse(
+        path,
+        media_type="text/x-shellscript",
+        filename="install-alloy.sh",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
 @app.get("/alert/logo-email.png")
 async def alert_email_logo():
     candidates = [
